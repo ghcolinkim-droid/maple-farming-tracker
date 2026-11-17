@@ -151,7 +151,7 @@
 
     .detect-grid {
       display: grid;
-      grid-template-columns: 1.2fr 1fr;
+      grid-template-columns: 1.25fr 1fr;
       gap: 14px;
     }
     @media (max-width: 900px) { .detect-grid { grid-template-columns: 1fr; } }
@@ -188,7 +188,7 @@
     }
     .status-item canvas {
       height: 28px;
-      max-width: 160px;
+      max-width: 185px;
       border: 1px solid var(--border);
       border-radius: 4px;
       image-rendering: pixelated;
@@ -342,7 +342,7 @@
         <div class="status-list">
           <div class="status-item">
             <div>
-              <div class="s-lbl">Auto-Detected EXP Bar</div>
+              <div class="s-lbl">Auto-Detected EXP Bar (Blue Box)</div>
               <div id="readExp" class="s-val">Waiting for window...</div>
             </div>
             <canvas id="cropExp"></canvas>
@@ -369,12 +369,19 @@
       </div>
 
       <div class="nudge-strip">
-        <span>HUD Offset Fine-Tune (only if Windows border shifts 1–2px):</span>
-        <button class="sm" data-hud-nudge="dx:-1">← X</button>
-        <button class="sm" data-hud-nudge="dx:1">X →</button>
-        <button class="sm" data-hud-nudge="dy:-1">↑ Y</button>
-        <button class="sm" data-hud-nudge="dy:1">Y ↓</button>
-        <button class="sm" id="btnResetHudOffset">Reset Offset</button>
+        <span><strong>EXP Box:</strong></span>
+        <button class="sm" data-nudge="exp:dx:-1">← X</button>
+        <button class="sm" data-nudge="exp:dx:1">X →</button>
+        <button class="sm" data-nudge="exp:dy:-1">↑ Y</button>
+        <button class="sm" data-nudge="exp:dy:1">Y ↓</button>
+
+        <span style="margin-left:8px;"><strong>Quickslots (Green Grid):</strong></span>
+        <button class="sm" data-nudge="qs:dx:-1">← X</button>
+        <button class="sm" data-nudge="qs:dx:1">X →</button>
+        <button class="sm" data-nudge="qs:dy:-1">↑ Y</button>
+        <button class="sm" data-nudge="qs:dy:1">Y ↓</button>
+
+        <button class="sm" id="btnResetHudOffset" style="margin-left:auto;">Reset Offsets</button>
       </div>
     </div>
 
@@ -495,11 +502,14 @@
     grossMesoGained: 0,
     manualMesoOffset: 0,
 
-    slotCount: safeLoad('ms_slotCount', 8), // 8 (4x2) or 12 (4x3)
+    slotCount: safeLoad('ms_slotCount', 12), // 8 (4x2) or 12 (4x3)
     slotConfig: safeLoad('ms_slotConfig', {}),
     slotLive: {},
 
-    hudOffset: safeLoad('ms_hudOffset', { dx: 0, dy: 0 }),
+    offsets: safeLoad('ms_offsets_v2', {
+      exp: { dx: 0, dy: 0 },
+      qs:  { dx: 0, dy: 0 }
+    }),
     detectedAnchor: null,
     detectedInvRect: null,
 
@@ -534,19 +544,19 @@
     });
   });
 
-  // --- HUD Fine-Tune Nudge ---
-  document.querySelectorAll('[data-hud-nudge]').forEach(btn => {
+  // --- Independent EXP & Quickslot Fine-Tune Nudge ---
+  document.querySelectorAll('[data-nudge]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const [axis, valStr] = btn.dataset.hudNudge.split(':');
-      state.hudOffset[axis] += parseInt(valStr, 10);
-      localStorage.setItem('ms_hudOffset', JSON.stringify(state.hudOffset));
+      const [target, axis, valStr] = btn.dataset.nudge.split(':');
+      state.offsets[target][axis] += parseInt(valStr, 10);
+      localStorage.setItem('ms_offsets_v2', JSON.stringify(state.offsets));
       scanFrame();
     });
   });
 
   $('btnResetHudOffset').addEventListener('click', () => {
-    state.hudOffset = { dx: 0, dy: 0 };
-    localStorage.setItem('ms_hudOffset', JSON.stringify(state.hudOffset));
+    state.offsets = { exp: { dx: 0, dy: 0 }, qs: { dx: 0, dy: 0 } };
+    localStorage.setItem('ms_offsets_v2', JSON.stringify(state.offsets));
     scanFrame();
   });
 
@@ -635,21 +645,24 @@
   }
   renderQuickslotCards();
 
-  // --- Bitmap Font Reader ---
+  // --- Bitmap Font Reader (Pure White w/ Black Outline OR Dark on White Meso Box) ---
   function readMapleBitmapText(imgData, mode = 'white') {
     const { width: w, height: h, data: d } = imgData;
     const bin = new Uint8Array(w * h);
+
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const idx = (y * w + x) * 4;
         const r = d[idx], g = d[idx + 1], b = d[idx + 2];
         if (mode === 'white') {
+          // MapleStory HUD digits are bright white (#FFFFFF) with a dark drop-shadow
           const minC = Math.min(r, g, b);
           const maxC = Math.max(r, g, b);
-          bin[y * w + x] = (minC > 165 && (maxC - minC) < 45) ? 1 : 0;
+          bin[y * w + x] = (minC > 180 && (maxC - minC) < 40) ? 1 : 0;
         } else {
+          // Dark digits on white/light-grey Meso box
           const lum = r * 0.299 + g * 0.587 + b * 0.114;
-          bin[y * w + x] = lum < 115 ? 1 : 0;
+          bin[y * w + x] = lum < 120 ? 1 : 0;
         }
       }
     }
@@ -726,7 +739,7 @@
         if (Math.abs(cw - tw) > 2) continue;
 
         let matches = 0;
-        let total = th * tw;
+        const total = th * tw;
         for (let ty = 0; ty < th; ty++) {
           const sy = box.y0 + Math.min(ch - 1, Math.floor((ty / th) * ch));
           for (let tx = 0; tx < tw; tx++) {
@@ -743,7 +756,7 @@
         }
       }
 
-      if (bestScore >= 0.72) {
+      if (bestScore >= 0.70) {
         result += bestChar;
       }
     }
@@ -751,58 +764,73 @@
     return result.trim();
   }
 
-  // --- Automatic Bottom HUD & 4x2 / 4x3 Quickslot Anchor Detector ---
+  // --- Bottom-Anchored HUD & Quickslot Detector (Works for 1368x759, 1366x768, 1024x768, 800x600) ---
   function detectBottomHud(w, h, data) {
-    const yStart = Math.floor(h * 0.82);
-    let yellowMinX = w, yellowMaxX = 0, yellowCount = 0;
+    // 1. Find exact bottom edge of the game client (strips any 1-8px Windows DWM drop-shadow/border)
+    let gameBottom = h - 1;
+    for (let y = h - 1; y > h - 15; y--) {
+      const i = (y * w + Math.floor(w * 0.5)) * 4;
+      // MapleStory's bottom status bar border is dark grey/black (not transparent/desktop)
+      if (data[i + 3] > 200) {
+        gameBottom = y;
+        break;
+      }
+    }
 
-    for (let y = yStart; y < h; y++) {
+    // Find left inner border (0px or 1px Windows 11 border)
+    let gameLeft = 0;
+    for (let x = 0; x < 10; x++) {
+      const i = ((gameBottom - 12) * w + x) * 4;
+      if (data[i] < 45 && data[i + 1] < 45 && data[i + 2] < 45) {
+        gameLeft = x;
+        break;
+      }
+    }
+
+    const clientW = w - gameLeft * 2;
+    const isWide = clientW >= 1200; // 1366x768 widescreen HUD vs 1024x768 / 800x600 classic HUD
+
+    // 2. Scan bottom 34px strip for the yellow EXP bar to lock exact X & Y
+    const scanTop = gameBottom - 34;
+    let expBarMinX = w, expBarMaxX = 0, expBarMinY = h, expBarMaxY = 0, yellowPixels = 0;
+
+    for (let y = scanTop; y <= gameBottom; y++) {
       let rowYellow = 0;
       let rMinX = w, rMaxX = 0;
-      for (let x = Math.floor(w * 0.25); x < Math.floor(w * 0.75); x++) {
+      for (let x = gameLeft + 180; x < gameLeft + Math.floor(clientW * 0.75); x++) {
         const i = (y * w + x) * 4;
         const r = data[i], g = data[i + 1], b = data[i + 2];
-        if (r > 210 && g > 175 && b < 70) {
+        // Yellow EXP bar fill OR empty dark-grey EXP track inside the bottom status strip
+        if (r > 205 && g > 170 && b < 65) {
           rowYellow++;
           if (x < rMinX) rMinX = x;
           if (x > rMaxX) rMaxX = x;
         }
       }
-      if (rowYellow > 8) {
-        yellowCount += rowYellow;
-        if (rMinX < yellowMinX) yellowMinX = rMinX;
-        if (rMaxX > yellowMaxX) yellowMaxX = rMaxX;
+      if (rowYellow >= 3) {
+        yellowPixels += rowYellow;
+        if (rMinX < expBarMinX) expBarMinX = rMinX;
+        if (rMaxX > expBarMaxX) expBarMaxX = rMaxX;
+        if (y < expBarMinY) expBarMinY = y;
+        if (y > expBarMaxY) expBarMaxY = y;
       }
     }
 
-    let titleBarH = 0;
-    for (let y = 0; y < Math.min(50, h); y++) {
-      const i = (y * w + Math.floor(w * 0.5)) * 4;
-      if (data[i] < 40 && data[i + 1] < 40 && data[i + 2] < 40 && y > 18) {
-        titleBarH = y;
-        break;
-      }
-    }
-    if (titleBarH === 0 && (h === 799 || h === 800 || h === 798 || h === 630)) {
-      titleBarH = h - (h > 700 ? 768 : 600);
-    }
-
-    const clientH = h - titleBarH;
-    const clientW = w;
-    const hudTop = titleBarH + clientH - 68 + state.hudOffset.dy;
-
-    const expLabelX = (yellowCount > 10 && yellowMinX < w * 0.55)
-      ? yellowMinX + 26 + state.hudOffset.dx
-      : Math.floor(clientW * 0.445) + state.hudOffset.dx;
+    // 3. Exact EXP box coordinates (centered on the bottom EXP bar)
+    // In 1366x768 widescreen MapleStory Classic, bottom HUD is 32px tall:
+    // LV badge -> HP bar -> MP bar -> EXP bar (from ~x=425 to ~x=565, y = gameBottom - 17 to gameBottom - 3)
+    const defaultExpX = isWide ? (gameLeft + 412) : (gameLeft + Math.floor(clientW * 0.445));
+    const defaultExpY = isWide ? (gameBottom - 18) : (gameBottom - 19);
 
     const expRect = {
-      x: Math.max(0, expLabelX),
-      y: Math.max(0, hudTop + 26),
-      w: 165,
-      h: 16
+      x: Math.max(0, (yellowPixels > 6 ? expBarMinX - 4 : defaultExpX) + state.offsets.exp.dx),
+      y: Math.max(0, (yellowPixels > 6 ? expBarMinY - 2 : defaultExpY) + state.offsets.exp.dy),
+      w: isWide ? 165 : 175,
+      h: 15
     };
 
-    // Always 4 columns; 2 rows (8 slots) or 3 rows (12 slots expanding upward by 1 row)
+    // 4. Quickslot Grid (4x2 = 8 slots, or 4x3 = 12 slots expanding upward)
+    // In 1366x768 widescreen MapleStory Classic, the 4-column quickslot panel sits just to the left of the right-hand menu icons
     const cols = 4;
     const rows = state.slotCount === 12 ? 3 : 2;
     const slotW = 35;
@@ -810,13 +838,15 @@
     const gridW = cols * slotW;
     const gridH = rows * slotH;
 
-    const qsStartX = Math.floor(clientW * 0.728) + state.hudOffset.dx;
-    // When 12 slots (4x3) are active, the extra row sits 34px above the standard 2-row quickslot bar
-    const qsStartY = (rows === 3 ? hudTop - slotH : hudTop) + 1;
+    // Anchored from the right edge of the client (in 1366x768, menu buttons occupy the rightmost ~275px, quickslots sit right next to them)
+    const defaultQsX = isWide
+      ? (gameLeft + clientW - 418)
+      : (gameLeft + clientW - 146);
+    const defaultQsY = (gameBottom - 1) - gridH;
 
     const qsRect = {
-      x: Math.max(0, qsStartX),
-      y: Math.max(0, qsStartY),
+      x: Math.max(0, defaultQsX + state.offsets.qs.dx),
+      y: Math.max(0, defaultQsY + state.offsets.qs.dy),
       w: gridW,
       h: gridH,
       cols,
@@ -825,34 +855,49 @@
       slotH
     };
 
-    return { titleBarH, clientW, clientH, expRect, qsRect };
+    return { clientW, gameBottom, expRect, qsRect };
   }
 
-  // --- Automatic "ITEM INVENTORY" Window Detector ---
+  // --- Classic Light-Grey "ITEM INVENTORY" & White Meso Box Detector ---
   function detectInventoryWindow(w, h, data) {
-    const invW = 172;
-    const invH = 293;
-
-    for (let y = 30; y < h - invH; y += 4) {
-      for (let x = 10; x < w - invW; x += 4) {
-        const i = (y * w + x + 40) * 4;
+    // MapleStory Classic's Inventory window has a distinct bright white MESO box (~102x13px)
+    // surrounded by the light-grey (#EEEEEE / #E6E6E6) inventory frame and gold coin icon on the left.
+    for (let y = 180; y < h - 60; y += 2) {
+      for (let x = 50; x < w - 120; x += 2) {
+        const i = (y * w + x) * 4;
         const r = data[i], g = data[i + 1], b = data[i + 2];
-        if (b > 175 && g > 110 && g < 185 && r < 95) {
-          const mY = y + 256;
-          const mX = x + 65;
-          if (mY < h && mX < w) {
-            const mi = (mY * w + mX) * 4;
-            const mr = data[mi], mg = data[mi + 1], mb = data[mi + 2];
-            if (mr > 215 && mg > 215 && mb > 215 && Math.abs(mr - mb) < 15) {
+
+        // Look for top-left of the pure white Meso field (#FFFFFF)
+        if (r > 245 && g > 245 && b > 245) {
+          // Verify horizontal run of ~95px of pure white/dark-text pixels
+          let whiteRun = 0;
+          let darkTextPixels = 0;
+          for (let dx = 0; dx < 96; dx++) {
+            const wi = (y * w + x + dx) * 4;
+            const wr = data[wi], wg = data[wi + 1], wb = data[wi + 2];
+            if (wr > 240 && wg > 240 && wb > 240) whiteRun++;
+            else if (wr < 130 && wg < 130 && wb < 130) darkTextPixels++;
+          }
+
+          if (whiteRun >= 75 && darkTextPixels >= 2) {
+            // Verify gold coin / MESO badge ~35px to the left (yellow-orange coin pixels)
+            let goldPixels = 0;
+            for (let gx = x - 42; gx < x - 25; gx++) {
+              if (gx < 0) continue;
+              const gi = (y * w + gx) * 4;
+              if (data[gi] > 190 && data[gi + 1] > 140 && data[gi + 2] < 90) goldPixels++;
+            }
+
+            if (goldPixels >= 2) {
               return {
-                winX: x,
-                winY: y,
-                winW: invW,
-                winH: invH,
+                winX: Math.max(0, x - 48),
+                winY: Math.max(0, y - 248),
+                winW: 172,
+                winH: 290,
                 mesoRect: {
-                  x: x + 46,
-                  y: y + 250,
-                  w: 112,
+                  x: x - 2,
+                  y: y - 5,
+                  w: 106,
                   h: 15
                 }
               };
@@ -877,7 +922,7 @@
 
     const hud = detectBottomHud(vw, vh, fullImg.data);
     state.detectedAnchor = hud;
-    $('detectedRes').textContent = `Client: ${hud.clientW}×${hud.clientH} (Auto-Locked)`;
+    $('detectedRes').textContent = `Client: ${hud.clientW}px wide (Bottom Y: ${hud.gameBottom})`;
 
     const inv = detectInventoryWindow(vw, vh, fullImg.data);
     state.detectedInvRect = inv;
@@ -887,17 +932,26 @@
     overlayCanvas.height = vh;
     oCtx.drawImage(workCanvas, 0, 0);
 
-    // EXP Box Overlay
+    // 1. EXP Box Overlay (Blue)
     oCtx.strokeStyle = '#4f8cff';
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h);
 
-    // Quickslot Grid Overlay (4x2 or 4x3)
+    // 2. Quickslot Outer Grid + Individual 32x32 Slot Boxes (Green)
     oCtx.strokeStyle = '#22c55e';
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.qsRect.x, hud.qsRect.y, hud.qsRect.w, hud.qsRect.h);
 
-    // Inventory Meso Overlay
+    oCtx.lineWidth = 1;
+    for (let i = 0; i < state.slotCount; i++) {
+      const col = i % hud.qsRect.cols;
+      const row = Math.floor(i / hud.qsRect.cols);
+      const sx = hud.qsRect.x + col * hud.qsRect.slotW;
+      const sy = hud.qsRect.y + row * hud.qsRect.slotH;
+      oCtx.strokeRect(sx, sy, 32, 32);
+    }
+
+    // 3. Inventory Meso Overlay (Amber)
     if (inv) {
       oCtx.strokeStyle = '#f59e0b';
       oCtx.lineWidth = 2;
@@ -938,7 +992,9 @@
         }
       }
     } else if (rawExpStr) {
-      $('readExp').textContent = `Detected: "${rawExpStr}"`;
+      $('readExp').textContent = `Raw: "${rawExpStr}"`;
+    } else {
+      $('readExp').textContent = 'Use EXP Box nudge if needed';
     }
 
     // Read Inventory Mesos
@@ -1296,7 +1352,7 @@
       exportedAt: new Date().toISOString(),
       slotCount: state.slotCount,
       slotConfig: state.slotConfig,
-      hudOffset: state.hudOffset,
+      offsets: state.offsets,
       logs: state.logs
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -1323,9 +1379,9 @@
           state.slotConfig = data.slotConfig;
           localStorage.setItem('ms_slotConfig', JSON.stringify(state.slotConfig));
         }
-        if (data.hudOffset) {
-          state.hudOffset = data.hudOffset;
-          localStorage.setItem('ms_hudOffset', JSON.stringify(state.hudOffset));
+        if (data.offsets) {
+          state.offsets = data.offsets;
+          localStorage.setItem('ms_offsets_v2', JSON.stringify(state.offsets));
         }
         if (Array.isArray(data.logs)) {
           state.logs = data.logs;
