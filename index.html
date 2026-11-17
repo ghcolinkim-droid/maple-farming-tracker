@@ -512,7 +512,7 @@
         <div>
           <h2>Zero-click HUD landmark detector</h2>
           <p style="font-size:0.75rem; color:var(--muted); margin-top:2px;">
-            Automatically locks onto Maple's gold <strong>LV.</strong> &amp; <strong>EXP</strong> badges, minimap title bar, inventory meso field, and quickslots. Optional override buttons below if needed.
+            Locks onto Maple's centered 800px bottom dock (<strong>LV.</strong>, <strong>EXP</strong>, <strong>8/12 Quickslots</strong>), minimap title row, and open Inventory meso box.
           </p>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
@@ -547,7 +547,7 @@
               <div class="s-lbl">MAP NAME ANCHOR (Purple Box) <span id="mapModeTag" class="auto-tag">AUTO</span></div>
               <div id="readMap" class="s-val" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Waiting for minimap header...</div>
               <div style="display:flex; gap:5px; margin-top:5px;">
-                <input type="text" id="manualMapInput" placeholder="Manual map override (e.g. Ice Valley II)" style="padding:4px 7px; font-size:0.76rem;" />
+                <input type="text" id="manualMapInput" placeholder="Manual map override (e.g. Line 1 <Area 1>)" style="padding:4px 7px; font-size:0.76rem;" />
                 <button id="btnSetManualMap" class="sm" style="white-space:nowrap;">Set Map</button>
               </div>
             </div>
@@ -612,10 +612,10 @@
         <div>
           <h2>Quickslot potions</h2>
           <p style="font-size:0.78rem; color:var(--muted); margin-top:2px;">
-            Finds your 8- or 12-slot panel automatically. Choose a potion type for each slot you want to track; leave skills and empty slots as <strong>Not tracked</strong>.
+            Auto-detects your 8- or 12-slot panel on the bottom dock. Choose a potion type for each slot you want to track; leave skills and empty slots as <strong>Not tracked</strong>.
           </p>
         </div>
-        <span id="slotsDetectedPill" class="pill-tag">12 SLOTS DETECTED</span>
+        <span id="slotsDetectedPill" class="pill-tag">8 SLOTS DETECTED</span>
       </div>
 
       <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:6px;">
@@ -625,7 +625,7 @@
         </label>
         <button id="btnRescanQs" class="sm">Rescan quickslots</button>
         <button id="btnResetPotUsage" class="sm">Reset potion usage</button>
-        <button id="btnToggleSlots" class="sm" style="margin-left:auto;">Panel: 12 Slots (4×3)</button>
+        <button id="btnToggleSlots" class="sm" style="margin-left:auto;">Panel: Auto (8 Slots 4×2)</button>
       </div>
       <div style="font-size:0.74rem; color:var(--muted); margin-bottom:8px;">
         Reading selected slots every 2 seconds. Unreadable frames keep the last count; missing digits (such as a stack of 1) are never treated as zero.
@@ -752,15 +752,16 @@
     manualMesoOffset: 0,
 
     trackPots: true,
-    slotCount: safeLoad('ms_slotCount_v3', 12),
+    slotCount: safeLoad('ms_slotCount_v4', 8),
+    slotModeManual: false,
     slotConfig: safeLoad('ms_slotConfig_v2', {}),
     slotLive: {},
 
-    offsets: safeLoad('ms_offsets_v6', {
+    offsets: safeLoad('ms_offsets_v7', {
       exp: { dx: 0, dy: 0 },
       qs:  { dx: 0, dy: 0 }
     }),
-    customNorm: safeLoad('ms_customNorm_v4', {
+    customNorm: safeLoad('ms_customNorm_v5', {
       exp:  null,
       map:  null,
       meso: null,
@@ -1329,7 +1330,8 @@
 
     if (w > 0.008 && h > 0.006) {
       state.customNorm[state.drawTarget] = { x, y, w, h };
-      localStorage.setItem('ms_customNorm_v4', JSON.stringify(state.customNorm));
+      localStorage.setItem('ms_customNorm_v5', JSON.stringify(state.customNorm));
+      if (state.drawTarget === 'qs') state.slotModeManual = true;
       updateModeBadges();
     }
     state.dragStart = null;
@@ -1344,7 +1346,7 @@
     btn.addEventListener('click', () => {
       const [target, axis, valStr] = btn.dataset.nudge.split(':');
       state.offsets[target][axis] += parseInt(valStr, 10);
-      localStorage.setItem('ms_offsets_v6', JSON.stringify(state.offsets));
+      localStorage.setItem('ms_offsets_v7', JSON.stringify(state.offsets));
       scanFrame();
     });
   });
@@ -1352,8 +1354,9 @@
   $('btnResetHudOffset').addEventListener('click', () => {
     state.offsets = { exp: { dx: 0, dy: 0 }, qs: { dx: 0, dy: 0 } };
     state.customNorm = { exp: null, map: null, meso: null, qs: null };
-    localStorage.setItem('ms_offsets_v6', JSON.stringify(state.offsets));
-    localStorage.setItem('ms_customNorm_v4', JSON.stringify(state.customNorm));
+    state.slotModeManual = false;
+    localStorage.setItem('ms_offsets_v7', JSON.stringify(state.offsets));
+    localStorage.setItem('ms_customNorm_v5', JSON.stringify(state.customNorm));
     updateModeBadges();
     scanFrame(true);
   });
@@ -1364,13 +1367,15 @@
 
   function updateSlotToggleLabel() {
     $('slotsDetectedPill').textContent = `${state.slotCount} SLOTS DETECTED`;
-    $('btnToggleSlots').textContent = state.slotCount === 12 ? 'Panel: 12 Slots (4×3)' : 'Panel: 8 Slots (4×2)';
+    const prefix = state.slotModeManual ? 'Panel: ' : 'Panel: Auto ';
+    $('btnToggleSlots').textContent = state.slotCount === 12 ? `${prefix}(12 Slots 4×3)` : `${prefix}(8 Slots 4×2)`;
   }
   updateSlotToggleLabel();
 
   $('btnToggleSlots').addEventListener('click', () => {
+    state.slotModeManual = true;
     state.slotCount = state.slotCount === 12 ? 8 : 12;
-    localStorage.setItem('ms_slotCount_v3', JSON.stringify(state.slotCount));
+    localStorage.setItem('ms_slotCount_v4', JSON.stringify(state.slotCount));
     updateSlotToggleLabel();
     renderQuickslotCards();
     scanFrame();
@@ -1458,13 +1463,14 @@
   }
   renderQuickslotCards();
 
-  function findQuickslotPanel(w, h, data, gameLeft, clientW, gameBottom) {
+  // --- Centered 800px Bottom-Dock Quickslot Detector (Auto 8 vs 12 Slots) ---
+  function findQuickslotPanel(w, h, data, dockLeft, dockRight, gameBottom) {
     const cols = 4;
-    const rows = state.slotCount === 12 ? 3 : 2;
     const slotW = 35;
     const slotH = 35;
 
     if (state.customNorm.qs) {
+      const rows = state.slotCount === 12 ? 3 : 2;
       const q = state.customNorm.qs;
       return {
         x: Math.round(q.x * w) + state.offsets.qs.dx,
@@ -1478,41 +1484,62 @@
       };
     }
 
-    const panelW = cols * slotW;
+    const panelW = cols * slotW; // 140px
+    const anchorRightX = dockRight - panelW - 2;
+    const anchorBottomY = gameBottom - 31;
+
+    const scoreCandidate = (x, y, rows) => {
+      let borderHits = 0;
+      let brightKeybindHits = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const sx = x + c * slotW;
+          const sy = y + r * slotH;
+          if (sx < 1 || sy < 1 || sx + 32 >= w || sy + 32 >= h) return -1;
+
+          const bi = ((sy + 16) * w + (sx - 1)) * 4;
+          if (data[bi] < 110 && data[bi + 1] < 110 && data[bi + 2] < 110) borderHits++;
+
+          const wi1 = ((sy + 4) * w + (sx + 26)) * 4;
+          if (data[wi1] > 200 && data[wi1 + 1] > 200 && data[wi1 + 2] > 200) brightKeybindHits++;
+
+          const wi2 = ((sy + 27) * w + (sx + 27)) * 4;
+          if (data[wi2] > 200 && data[wi2 + 1] > 200 && data[wi2 + 2] > 200) brightKeybindHits++;
+        }
+      }
+      if (borderHits < Math.floor(cols * rows * 0.6)) return -1;
+      return (borderHits * 3 + brightKeybindHits * 2) / (cols * rows);
+    };
+
+    // Auto-detect whether 2 rows (8 slots) or 3 rows (12 slots) is present on the bottom dock
+    if (!state.slotModeManual) {
+      const score2 = scoreCandidate(anchorRightX, anchorBottomY - 2 * slotH, 2);
+      const score3 = scoreCandidate(anchorRightX, anchorBottomY - 3 * slotH, 3);
+      const detectedCount = (score3 > score2 + 0.6 && score3 > 4.2) ? 12 : 8;
+      if (detectedCount !== state.slotCount) {
+        state.slotCount = detectedCount;
+        localStorage.setItem('ms_slotCount_v4', JSON.stringify(state.slotCount));
+        updateSlotToggleLabel();
+        renderQuickslotCards();
+      }
+    }
+
+    const rows = state.slotCount === 12 ? 3 : 2;
     const panelH = rows * slotH;
-    let bestX = gameLeft + clientW - panelW - 4;
-    let bestY = gameBottom - 30 - panelH;
+    let bestX = anchorRightX;
+    let bestY = anchorBottomY - panelH;
     let bestScore = -1;
 
-    const searchX0 = Math.max(0, bestX - 65);
-    const searchX1 = Math.min(w - panelW - 1, gameLeft + clientW - panelW + 2);
-    const searchY0 = Math.max(0, bestY - 45);
-    const searchY1 = Math.min(h - panelH - 1, gameBottom - 18 - panelH);
+    const searchX0 = Math.max(0, anchorRightX - 36);
+    const searchX1 = Math.min(w - panelW - 1, anchorRightX + 24);
+    const searchY0 = Math.max(0, bestY - 18);
+    const searchY1 = Math.min(h - panelH - 1, bestY + 14);
 
     for (let y = searchY0; y <= searchY1; y++) {
       for (let x = searchX0; x <= searchX1; x++) {
-        let gridBorderHits = 0;
-        let innerBrightHits = 0;
-
-        for (let r = 0; r < rows; r++) {
-          for (let c = 0; c < cols; c++) {
-            const sx = x + c * slotW;
-            const sy = y + r * slotH;
-
-            const bi = ((sy + 16) * w + Math.max(0, sx - 1)) * 4;
-            if (data[bi] < 105 && data[bi + 1] < 105 && data[bi + 2] < 105) gridBorderHits++;
-
-            const wi1 = ((sy + 4) * w + (sx + 26)) * 4;
-            if (data[wi1] > 205 && data[wi1 + 1] > 205 && data[wi1 + 2] > 205) innerBrightHits++;
-
-            const wi2 = ((sy + 27) * w + (sx + 27)) * 4;
-            if (data[wi2] > 205 && data[wi2 + 1] > 205 && data[wi2 + 2] > 205) innerBrightHits++;
-          }
-        }
-
-        const score = gridBorderHits * 3 + innerBrightHits * 2;
-        if (score > bestScore && gridBorderHits >= Math.floor(cols * rows * 0.6)) {
-          bestScore = score;
+        const sc = scoreCandidate(x, y, rows);
+        if (sc > bestScore) {
+          bestScore = sc;
           bestX = x;
           bestY = y;
         }
@@ -1531,7 +1558,7 @@
     };
   }
 
-  // --- ZERO-CLICK LANDMARK HUD DETECTOR (LV., EXP, Minimap Header, Quickslots) ---
+  // --- ZERO-CLICK LANDMARK HUD DETECTOR (Centered 800px Dock + Minimap Title Row) ---
   function detectBottomHud(w, h, data) {
     let clientW = w;
     let gameLeft = 0;
@@ -1556,6 +1583,11 @@
       gameTop = Math.max(0, gameBottom - 599);
     }
 
+    // In 1366x768 & 1024x768 widescreen, MapleStory centers its 800px bottom status/quickslot dock
+    const dockW = Math.min(clientW, 800);
+    const dockLeft = gameLeft + Math.floor((clientW - dockW) / 2);
+    const dockRight = dockLeft + dockW;
+
     const isGoldBadgePixel = (x, y) => {
       if (x < 0 || y < 0 || x >= w || y >= h) return false;
       const i = (y * w + x) * 4;
@@ -1563,11 +1595,11 @@
       return r > 205 && g > 165 && b < 85 && (r - b) > 125;
     };
 
-    // 1. Auto-Detect Character Level Badge ("LV." on bottom-left HUD)
+    // 1. Auto-Detect Character Level Badge ("LV." at left side of centered 800px dock)
     let levelRect = null;
-    const lvX0 = gameLeft + 10;
-    const lvX1 = gameLeft + Math.round(clientW * 0.14);
-    const lvY0 = Math.max(0, gameBottom - 36);
+    const lvX0 = dockLeft + 4;
+    const lvX1 = dockLeft + 95;
+    const lvY0 = Math.max(0, gameBottom - 30);
     const lvY1 = Math.max(0, gameBottom - 3);
     let lvMaxX = -1, lvSumY = 0, lvHits = 0;
 
@@ -1580,17 +1612,17 @@
         }
       }
     }
-    if (lvHits >= 12 && lvMaxX > 0) {
+    if (lvHits >= 10 && lvMaxX > 0) {
       const cy = Math.round(lvSumY / lvHits);
       levelRect = {
-        x: Math.min(w - 40, lvMaxX + 2),
+        x: Math.min(w - 38, lvMaxX + 2),
         y: Math.max(0, cy - 8),
-        w: 36,
-        h: 16
+        w: 34,
+        h: 15
       };
     }
 
-    // 2. Auto-Detect EXP Bar via Gold "EXP" Label Landmark + White Text Cluster
+    // 2. Auto-Detect EXP Bar via Gold "EXP" Label on Centered Dock (Avoiding CASH SHOP icon at dockLeft+525)
     let expRect;
     if (state.customNorm.exp) {
       const c = state.customNorm.exp;
@@ -1601,22 +1633,22 @@
         h: Math.round(c.h * h)
       };
     } else {
-      const expSearchX0 = gameLeft + Math.round(clientW * 0.45);
-      const expSearchX1 = gameLeft + Math.round(clientW * 0.72);
-      const expSearchY0 = Math.max(0, gameBottom - 34);
-      const expSearchY1 = Math.max(0, gameBottom - 2);
+      // On the 800px dock, "EXP" label sits at dockLeft + 390..435, and CASH SHOP starts after dockLeft + 518
+      const expSearchX0 = dockLeft + 380;
+      const expSearchX1 = dockLeft + 455;
+      const expSearchY0 = Math.max(0, gameBottom - 20);
+      const expSearchY1 = Math.max(0, gameBottom - 3);
 
-      // Find the densest horizontal cluster of gold "EXP" label pixels
       let bestBadgeRightX = -1;
       let bestBadgeCenterY = -1;
       let bestClusterCount = 0;
 
       for (let y = expSearchY0; y <= expSearchY1 - 6; y++) {
-        for (let x = expSearchX0; x <= expSearchX1 - 18; x++) {
+        for (let x = expSearchX0; x <= expSearchX1 - 16; x++) {
           let hits = 0;
           let rightMost = x;
-          for (let dy = 0; dy < 8; dy++) {
-            for (let dx = 0; dx < 22; dx++) {
+          for (let dy = 0; dy < 7; dy++) {
+            for (let dx = 0; dx < 20; dx++) {
               if (isGoldBadgePixel(x + dx, y + dy)) {
                 hits++;
                 if (x + dx > rightMost) rightMost = x + dx;
@@ -1626,24 +1658,24 @@
           if (hits > bestClusterCount) {
             bestClusterCount = hits;
             bestBadgeRightX = rightMost;
-            bestBadgeCenterY = y + 4;
+            bestBadgeCenterY = y + 3;
           }
         }
       }
 
-      if (bestClusterCount >= 14 && bestBadgeRightX > 0) {
-        // Refine exact white text bounds immediately to the right of the gold EXP label
+      if (bestClusterCount >= 10 && bestBadgeRightX > 0) {
+        // Start strictly AFTER the gold EXP badge so "EXP." isn't inside the OCR digits crop
         const scanX0 = bestBadgeRightX + 4;
-        const scanX1 = Math.min(gameLeft + Math.round(clientW * 0.88), scanX0 + 230);
-        const scanY0 = Math.max(0, bestBadgeCenterY - 8);
-        const scanY1 = Math.min(gameBottom, bestBadgeCenterY + 8);
+        const scanX1 = Math.min(dockLeft + 520, scanX0 + 115);
+        const scanY0 = Math.max(0, bestBadgeCenterY - 7);
+        const scanY1 = Math.min(gameBottom, bestBadgeCenterY + 7);
 
         let minTX = scanX1, maxTX = scanX0, tHits = 0;
         for (let ty = scanY0; ty <= scanY1; ty++) {
           for (let tx = scanX0; tx <= scanX1; tx++) {
             const i = (ty * w + tx) * 4;
             const r = data[i], g = data[i + 1], b = data[i + 2];
-            if (r > 205 && g > 205 && b > 205 && Math.abs(r - b) < 30) {
+            if (r > 195 && g > 195 && b > 195 && Math.abs(r - b) < 35) {
               tHits++;
               if (tx < minTX) minTX = tx;
               if (tx > maxTX) maxTX = tx;
@@ -1651,58 +1683,25 @@
           }
         }
 
-        const startX = tHits >= 12 ? Math.max(scanX0, minTX - 4) : scanX0 + 18;
-        const boxW = tHits >= 12 ? Math.min(220, Math.max(120, maxTX - startX + 8)) : 185;
+        const startX = tHits >= 8 ? Math.max(scanX0, minTX - 3) : scanX0 + 2;
+        const boxW = tHits >= 8 ? Math.min(115, Math.max(82, maxTX - startX + 6)) : 96;
         expRect = {
           x: Math.max(0, startX + state.offsets.exp.dx),
-          y: Math.max(0, bestBadgeCenterY - 7 + state.offsets.exp.dy),
+          y: Math.max(0, bestBadgeCenterY - 6 + state.offsets.exp.dy),
           w: boxW,
-          h: 15
+          h: 13
         };
       } else {
-        // Fallback: white text scan on bottom-right EXP track
-        const bandX0 = gameLeft + Math.round(clientW * 0.60);
-        const bandX1 = gameLeft + Math.round(clientW * 0.86);
-        const bandY0 = Math.max(0, gameBottom - 18);
-        const bandY1 = Math.max(0, gameBottom - 2);
-
-        let minTextX = bandX1, maxTextX = bandX0;
-        let minTextY = bandY1, maxTextY = bandY0;
-        let whiteTextHits = 0;
-
-        for (let y = bandY0; y <= bandY1; y++) {
-          for (let x = bandX0; x <= bandX1; x++) {
-            const i = (y * w + x) * 4;
-            const r = data[i], g = data[i + 1], b = data[i + 2];
-            if (r > 205 && g > 205 && b > 205 && Math.abs(r - b) < 30) {
-              whiteTextHits++;
-              if (x < minTextX) minTextX = x;
-              if (x > maxTextX) maxTextX = x;
-              if (y < minTextY) minTextY = y;
-              if (y > maxTextY) maxTextY = y;
-            }
-          }
-        }
-
-        if (whiteTextHits >= 15 && (maxTextX - minTextX) >= 40) {
-          expRect = {
-            x: Math.max(0, minTextX - 4 + state.offsets.exp.dx),
-            y: Math.max(0, minTextY - 3 + state.offsets.exp.dy),
-            w: Math.min(230, Math.max(115, maxTextX - minTextX + 10)),
-            h: Math.min(20, Math.max(14, maxTextY - minTextY + 6))
-          };
-        } else {
-          expRect = {
-            x: Math.max(0, gameLeft + Math.round(clientW * 0.64) + state.offsets.exp.dx),
-            y: Math.max(0, gameBottom - 16 + state.offsets.exp.dy),
-            w: 185,
-            h: 15
-          };
-        }
+        expRect = {
+          x: Math.max(0, dockLeft + 416 + state.offsets.exp.dx),
+          y: Math.max(0, gameBottom - 16 + state.offsets.exp.dy),
+          w: 98,
+          h: 13
+        };
       }
     }
 
-    // 3. Auto-Detect Top-Left Minimap Header Bar (Map Name Banner)
+    // 3. Auto-Detect Minimap Map Name Row (Skipping top "MAP | WORLD" tab row at gameTop + 4..18)
     let mapRect;
     if (state.customNorm.map) {
       const m = state.customNorm.map;
@@ -1713,11 +1712,10 @@
         h: Math.round(m.h * h)
       };
     } else {
-      // Scan top-left minimap area for crisp white map title text over dark translucent slate/navy header
-      const mX0 = gameLeft + 28;
-      const mX1 = gameLeft + 320;
-      const mY0 = gameTop + 6;
-      const mY1 = gameTop + 72;
+      const mX0 = gameLeft + 34;
+      const mX1 = gameLeft + 260;
+      const mY0 = gameTop + 19; // Start below the "MAP | WORLD" tab bar
+      const mY1 = gameTop + 56;
 
       let bestRowY = -1;
       let bestRowScore = 0;
@@ -1744,7 +1742,7 @@
         }
 
         const span = rowMaxX - rowMinX;
-        if (whiteCount >= 14 && darkBgCount >= 60 && span >= 35 && span <= 240) {
+        if (whiteCount >= 10 && darkBgCount >= 55 && span >= 30 && span <= 210) {
           const score = whiteCount * 2 + darkBgCount;
           if (score > bestRowScore) {
             bestRowScore = score;
@@ -1757,26 +1755,26 @@
 
       if (bestRowY > 0) {
         mapRect = {
-          x: Math.max(gameLeft + 6, bestRowMinX - 6),
-          y: Math.max(gameTop + 2, bestRowY - 8),
-          w: Math.min(265, Math.max(145, bestRowMaxX - bestRowMinX + 24)),
-          h: 18
+          x: Math.max(gameLeft + 34, bestRowMinX - 5),
+          y: Math.max(gameTop + 18, bestRowY - 7),
+          w: Math.min(220, Math.max(125, bestRowMaxX - bestRowMinX + 18)),
+          h: 16
         };
       } else {
         mapRect = {
           x: gameLeft + 44,
           y: gameTop + 23,
-          w: 215,
-          h: 18
+          w: 195,
+          h: 16
         };
       }
     }
 
-    const qsRect = findQuickslotPanel(w, h, data, gameLeft, clientW, gameBottom);
+    const qsRect = findQuickslotPanel(w, h, data, dockLeft, dockRight, gameBottom);
     return { clientW, gameBottom, levelRect, expRect, mapRect, qsRect };
   }
 
-  // --- Recessed Light-Grey / White Meso Box Detector ---
+  // --- Recessed Light-Grey / White Meso Box Detector (With Inventory Grid Verification) ---
   function detectInventoryWindow(w, h, data) {
     if (state.customNorm.meso) {
       const m = state.customNorm.meso;
@@ -1797,11 +1795,11 @@
       if (px < 0 || py < 0 || px >= w || py >= h) return false;
       const i = (py * w + px) * 4;
       const r = data[i], g = data[i + 1], b = data[i + 2];
-      return r >= 195 && g >= 195 && b >= 195 && Math.abs(r - b) < 16;
+      return r >= 198 && g >= 198 && b >= 198 && Math.abs(r - b) < 12;
     };
 
-    for (let y = 100; y < h - 40; y += 2) {
-      for (let x = 20; x < w - 95; x += 2) {
+    for (let y = 210; y < h - 45; y += 2) {
+      for (let x = 25; x < w - 95; x += 2) {
         if (!isFieldBg(x, y) || isFieldBg(x - 2, y)) continue;
 
         let boxTop = y;
@@ -1823,16 +1821,36 @@
         const boxW = boxRight - boxLeft + 1;
         if (boxW < 68 || boxW > 95) continue;
 
+        // Check gold MESO icon immediately left of the box
         let goldPixels = 0;
         for (let gy = boxTop - 1; gy <= boxBottom + 1; gy++) {
           for (let gx = boxLeft - 38; gx <= boxLeft - 3; gx++) {
             if (gx < 0 || gy < 0) continue;
             const gi = (gy * w + gx) * 4;
-            if (data[gi] > 170 && data[gi + 1] > 120 && data[gi + 2] < 105) goldPixels++;
+            if (data[gi] > 180 && data[gi + 1] > 130 && data[gi + 2] < 95) goldPixels++;
+          }
+        }
+        if (goldPixels < 3) continue;
+
+        // Verify the white/light-grey Inventory Item Grid exists directly ABOVE the meso box
+        const gridX0 = Math.max(0, boxLeft - 42);
+        const gridX1 = Math.min(w - 1, boxRight + 4);
+        const gridY0 = Math.max(0, boxTop - 195);
+        const gridY1 = Math.max(0, boxTop - 12);
+        let neutralLightHits = 0;
+        let sampled = 0;
+        for (let gy = gridY0; gy <= gridY1; gy += 4) {
+          for (let gx = gridX0; gx <= gridX1; gx += 4) {
+            sampled++;
+            const gi = (gy * w + gx) * 4;
+            const r = data[gi], g = data[gi + 1], b = data[gi + 2];
+            if (r > 185 && g > 185 && b > 185 && Math.max(r, g, b) - Math.min(r, g, b) < 18) {
+              neutralLightHits++;
+            }
           }
         }
 
-        if (goldPixels >= 2) {
+        if (sampled > 0 && (neutralLightHits / sampled) >= 0.45) {
           return {
             winX: Math.max(0, boxLeft - 48),
             winY: Math.max(0, boxTop - 246),
@@ -1849,6 +1867,31 @@
       }
     }
     return null;
+  }
+
+  // --- Robust EXP String Parser (Handles "814.307[63.80%]", "814,307 [63.80%]", "EXP. ...") ---
+  function parseExpOcrText(rawExpStr, reqExp) {
+    if (!rawExpStr) return { exp: null, pct: null };
+    const trimmed = rawExpStr.replace(/^[^\d]+/, '');
+    if (!trimmed) return { exp: null, pct: null };
+
+    const bracketSplit = trimmed.split(/[\[\(]/);
+    const leftDigits = (bracketSplit[0] || '').replace(/[^\d]/g, '');
+    if (!leftDigits) return { exp: null, pct: null };
+
+    const parsedExp = parseInt(leftDigits, 10);
+    if (isNaN(parsedExp)) return { exp: null, pct: null };
+
+    let parsedPct = null;
+    if (bracketSplit.length > 1) {
+      const pctMatch = bracketSplit[1].match(/(\d{1,2}\.\d{1,2})/);
+      if (pctMatch) parsedPct = parseFloat(pctMatch[1]);
+    }
+    if (parsedPct === null || isNaN(parsedPct)) {
+      parsedPct = Math.min(99.99, (parsedExp / reqExp) * 100);
+    }
+
+    return { exp: parsedExp, pct: parsedPct };
   }
 
   function pushRecentCapture(expVal, pctVal) {
@@ -2036,21 +2079,8 @@
         ocrWorker
       );
 
-      let parsedExp = null;
-      let parsedPct = null;
       const reqExp = getExpToNextLevel(state.level);
-
-      const fullMatch = rawExpStr.match(/([\d,]{1,12})[^\d\.]*(\d{1,2}\.\d{2})\s*%?/);
-      if (fullMatch) {
-        parsedExp = parseInt(fullMatch[1].replace(/[^\d]/g, ''), 10);
-        parsedPct = parseFloat(fullMatch[2]);
-      } else {
-        const intOnly = rawExpStr.split('[')[0].replace(/[^\d]/g, '');
-        if (intOnly.length >= 1) {
-          parsedExp = parseInt(intOnly, 10);
-          parsedPct = Math.min(99.99, (parsedExp / reqExp) * 100);
-        }
-      }
+      const { exp: parsedExp, pct: parsedPct } = parseExpOcrText(rawExpStr, reqExp);
 
       if (parsedExp !== null && !isNaN(parsedExp)) {
         $('readExp').textContent = `Lv.${state.level} · ${fmtNum(parsedExp)} [${parsedPct.toFixed(2)}%]`;
@@ -2541,7 +2571,7 @@
         }
         if (data.slotCount) {
           state.slotCount = data.slotCount;
-          localStorage.setItem('ms_slotCount_v3', JSON.stringify(state.slotCount));
+          localStorage.setItem('ms_slotCount_v4', JSON.stringify(state.slotCount));
           updateSlotToggleLabel();
         }
         if (data.slotConfig) {
@@ -2550,11 +2580,11 @@
         }
         if (data.offsets) {
           state.offsets = data.offsets;
-          localStorage.setItem('ms_offsets_v6', JSON.stringify(state.offsets));
+          localStorage.setItem('ms_offsets_v7', JSON.stringify(state.offsets));
         }
         if (data.customNorm) {
           state.customNorm = data.customNorm;
-          localStorage.setItem('ms_customNorm_v4', JSON.stringify(state.customNorm));
+          localStorage.setItem('ms_customNorm_v5', JSON.stringify(state.customNorm));
           updateModeBadges();
         }
         if (Array.isArray(data.logs)) {
