@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MapleStory Classic — Auto-Detect EXP & Profit Tracker</title>
+  <title>MapleStory Classic — Zero-Click Auto-Detect EXP & Profit Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     :root {
@@ -27,7 +27,7 @@
       color: var(--text);
       line-height: 1.45;
       padding: 16px;
-      max-width: 1260px;
+      max-width: 1280px;
       margin: 0 auto;
     }
 
@@ -43,7 +43,7 @@
       padding: 12px 16px;
       margin-bottom: 14px;
     }
-    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .brand h1 { font-size: 1.05rem; font-weight: 700; }
     .badge {
       font-size: 0.72rem;
@@ -57,6 +57,15 @@
     .badge.grinding { background: rgba(34, 197, 94, 0.18); color: var(--green); border: 1px solid rgba(34,197,94,0.4); }
     .badge.npc { background: rgba(245, 158, 11, 0.18); color: var(--amber); border: 1px solid rgba(245,158,11,0.4); }
     .badge.paused { background: rgba(239, 68, 68, 0.18); color: var(--red); border: 1px solid rgba(239,68,68,0.4); }
+    .map-pill {
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(168, 85, 247, 0.16);
+      color: #d8b4fe;
+      border: 1px solid rgba(168, 85, 247, 0.38);
+    }
 
     .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     button {
@@ -80,11 +89,10 @@
     button.purple { background: rgba(168, 85, 247, 0.15); border-color: var(--purple); color: #d8b4fe; }
     button.sm { padding: 4px 9px; font-size: 0.78rem; }
     button.active-tool { outline: 2px solid #fff; background: var(--accent); color: #fff; }
-    button.needs-setup { border-color: var(--amber); color: var(--amber); background: rgba(245, 158, 11, 0.12); }
 
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
       gap: 12px;
       margin-bottom: 14px;
     }
@@ -104,16 +112,17 @@
       align-items: center;
     }
     .kpi-value {
-      font-size: 1.55rem;
+      font-size: 1.5rem;
       font-weight: 800;
       margin: 4px 0;
       font-variant-numeric: tabular-nums;
     }
-    .kpi-sub { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .kpi-sub { font-size: 0.79rem; color: var(--muted); font-variant-numeric: tabular-nums; }
     .val-green { color: var(--green); }
     .val-amber { color: var(--amber); }
     .val-red { color: var(--red); }
     .val-blue { color: var(--accent); }
+    .val-purple { color: #c084fc; }
 
     .tabs {
       display: flex;
@@ -153,6 +162,50 @@
     }
     .card h2 { font-size: 0.95rem; color: var(--text); }
 
+    .analytics-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 960px) { .analytics-grid { grid-template-columns: 1fr; } }
+
+    .chart-wrap {
+      position: relative;
+      width: 100%;
+      height: 225px;
+      background: #0b0d13;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    canvas#expChartCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .chart-tooltip {
+      position: absolute;
+      pointer-events: none;
+      background: rgba(24, 27, 36, 0.96);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 6px 9px;
+      font-size: 0.74rem;
+      color: var(--text);
+      display: none;
+      white-space: nowrap;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+    }
+
+    .map-table-wrap {
+      max-height: 225px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
     .detect-grid {
       display: grid;
       grid-template-columns: 1.25fr 1fr;
@@ -188,7 +241,7 @@
       background: var(--panel-alt);
       border: 1px solid var(--border);
       border-radius: 7px;
-      padding: 9px 12px;
+      padding: 8px 12px;
     }
     .ocr-pair {
       display: flex;
@@ -197,26 +250,38 @@
       gap: 3px;
     }
     .status-item canvas {
-      height: 26px;
-      max-width: 210px;
+      height: 24px;
+      max-width: 205px;
       border: 1px solid var(--border);
       border-radius: 3px;
       image-rendering: auto;
       background: #fff;
     }
-    .s-lbl { font-size: 0.74rem; color: var(--muted); }
-    .s-val { font-family: monospace; font-weight: 700; font-size: 0.9rem; color: var(--text); }
+    .s-lbl { font-size: 0.72rem; color: var(--muted); }
+    .s-val { font-family: monospace; font-weight: 700; font-size: 0.88rem; color: var(--text); }
+    .auto-tag {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(34, 197, 94, 0.16);
+      color: var(--green);
+      margin-left: 5px;
+      vertical-align: middle;
+    }
 
     .recent-feed {
       background: var(--panel-alt);
       border: 1px solid var(--border);
       border-radius: 7px;
       padding: 8px 12px;
-      font-size: 0.76rem;
+      font-size: 0.75rem;
     }
     .recent-row {
       display: flex;
       justify-content: space-between;
+      gap: 8px;
       color: var(--muted);
       padding: 2px 0;
       font-family: monospace;
@@ -323,10 +388,10 @@
       color: var(--muted);
     }
 
-    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
-    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
-    th { color: var(--muted); font-weight: 600; font-size: 0.76rem; text-transform: uppercase; }
-    .empty-msg { color: var(--muted); text-align: center; padding: 24px; font-size: 0.85rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; background: var(--panel-alt); position: sticky; top: 0; }
+    .empty-msg { color: var(--muted); text-align: center; padding: 22px; font-size: 0.83rem; }
   </style>
 </head>
 <body>
@@ -335,6 +400,7 @@
     <div class="brand">
       <h1>🍁 Maple Auto-Tracker</h1>
       <span id="statusBadge" class="badge idle">Waiting for Sharing</span>
+      <span id="headerMapBadge" class="map-pill">📍 Map: Auto-Detecting...</span>
     </div>
     <div class="controls">
       <button id="btnCapture" class="primary">1. Share Maple Window</button>
@@ -347,11 +413,18 @@
     </div>
   </header>
 
+  <!-- 5-Card Live Hero KPIs -->
   <section class="kpi-grid">
     <div class="kpi-card">
-      <div class="kpi-label"><span>EXP / Hour</span><span id="expClock">00:00:00</span></div>
+      <div class="kpi-label"><span>EXP / Hour (Session)</span><span id="expClock">00:00:00</span></div>
       <div id="kpiExpHr" class="kpi-value val-blue">0</div>
       <div id="kpiExpSub" class="kpi-sub">Session: +0 EXP</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label"><span>Trailing 5-Min Pace</span><span id="paceWindowTag">Last 5m</span></div>
+      <div id="kpiPace5mHr" class="kpi-value val-purple">0 / hr</div>
+      <div id="kpiPace5mChunk" class="kpi-sub">+0 / 5m · Waiting for kills</div>
     </div>
 
     <div class="kpi-card">
@@ -379,24 +452,75 @@
   </section>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-live">Auto-HUD & Quickslots</button>
+    <button class="tab-btn active" data-tab="tab-live">Auto-HUD, Chart & Per-Map</button>
     <button class="tab-btn" data-tab="tab-logs">Saved Grind Logs & Backup</button>
   </div>
 
   <div id="tab-live" class="tab-panel active">
+    <!-- Experience Over Time Chart + Per-Map Visits History -->
+    <div class="analytics-grid">
+      <div class="card" style="margin-bottom:0;">
+        <div class="card-head">
+          <div>
+            <h2>Experience over time</h2>
+            <p id="chartSubLabel" style="font-size:0.74rem; color:var(--muted); margin-top:2px;">
+              0 samples · EXP curve & map transitions appear as you grind
+            </p>
+          </div>
+          <div style="display:flex; gap:5px;">
+            <button id="btnChartModeGain" class="sm active-tool">Cumulative EXP</button>
+            <button id="btnChartModeRate" class="sm">Rolling EXP/hr</button>
+          </div>
+        </div>
+        <div class="chart-wrap" id="chartWrap">
+          <canvas id="expChartCanvas"></canvas>
+          <div id="chartTooltip" class="chart-tooltip"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:0;">
+        <div class="card-head">
+          <div>
+            <h2>Map visits this session</h2>
+            <p style="font-size:0.74rem; color:var(--muted); margin-top:2px;">
+              Auto-splits when map name changes · Hourly rates are map-specific
+            </p>
+          </div>
+          <span id="mapVisitCountPill" class="pill-tag">0 VISITS</span>
+        </div>
+        <div class="map-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Map</th>
+                <th>Time</th>
+                <th>EXP / hr</th>
+                <th>Net / hr</th>
+              </tr>
+            </thead>
+            <tbody id="perMapTableBody">
+              <tr><td colspan="4" class="empty-msg">Start grinding to record per-map EXP & profit rates.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zero-Click Auto-HUD Detection & Optional Overrides -->
     <div class="card">
       <div class="card-head">
         <div>
-          <h2>Latest game capture & calibration</h2>
+          <h2>Zero-click HUD landmark detector</h2>
           <p style="font-size:0.75rem; color:var(--muted); margin-top:2px;">
-            Step 1: Click <strong>Select EXP readout</strong> and drag tightly around <code>772,854 [68.26%]</code> (saved automatically). Mesos & quickslots auto-detect.
+            Automatically locks onto Maple's gold <strong>LV.</strong> &amp; <strong>EXP</strong> badges, minimap title bar, inventory meso field, and quickslots. Optional override buttons below if needed.
           </p>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-          <span id="detectedRes" style="font-size:0.78rem; color:var(--muted);">Engine: Loading...</span>
-          <button id="btnDrawExp" class="sm">Select EXP readout</button>
-          <button id="btnDrawMeso" class="sm">Select meso amount</button>
-          <button id="btnDrawQs" class="sm">Select quickslots</button>
+          <span id="detectedRes" style="font-size:0.78rem; color:var(--muted);">OCR Engine: Loading...</span>
+          <button id="btnDrawExp" class="sm">Override EXP</button>
+          <button id="btnDrawMap" class="sm">Override Map</button>
+          <button id="btnDrawMeso" class="sm">Override Meso</button>
+          <button id="btnDrawQs" class="sm">Override Quickslots</button>
           <button id="btnRescan" class="sm green">Read frame</button>
         </div>
       </div>
@@ -409,8 +533,8 @@
         <div class="status-list">
           <div class="status-item">
             <div>
-              <div class="s-lbl">EXP READOUT INPUT</div>
-              <div id="readExp" class="s-val">Click "Select EXP readout" or Share</div>
+              <div class="s-lbl">EXP &amp; LEVEL ANCHORS (Blue &amp; Cyan Boxes) <span id="expModeTag" class="auto-tag">AUTO</span></div>
+              <div id="readExp" class="s-val">Waiting for screen share...</div>
             </div>
             <div class="ocr-pair">
               <canvas id="cropExp"></canvas>
@@ -419,8 +543,23 @@
           </div>
 
           <div class="status-item">
+            <div style="flex:1; min-width:0;">
+              <div class="s-lbl">MAP NAME ANCHOR (Purple Box) <span id="mapModeTag" class="auto-tag">AUTO</span></div>
+              <div id="readMap" class="s-val" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Waiting for minimap header...</div>
+              <div style="display:flex; gap:5px; margin-top:5px;">
+                <input type="text" id="manualMapInput" placeholder="Manual map override (e.g. Ice Valley II)" style="padding:4px 7px; font-size:0.76rem;" />
+                <button id="btnSetManualMap" class="sm" style="white-space:nowrap;">Set Map</button>
+              </div>
+            </div>
+            <div class="ocr-pair">
+              <canvas id="cropMap"></canvas>
+              <canvas id="binMap"></canvas>
+            </div>
+          </div>
+
+          <div class="status-item">
             <div>
-              <div class="s-lbl">MESO AMOUNT INPUT (Press <code>I</code> or Select region)</div>
+              <div class="s-lbl">MESO AMOUNT ANCHOR (Press <code>I</code> in-game) <span id="mesoModeTag" class="auto-tag">AUTO</span></div>
               <div id="readMeso" class="s-val">Open Inventory to sync</div>
             </div>
             <div class="ocr-pair">
@@ -449,25 +588,25 @@
       </div>
 
       <div class="nudge-strip">
-        <span><strong>EXP Box:</strong></span>
+        <span><strong>EXP Nudge:</strong></span>
         <button class="sm" data-nudge="exp:dx:-1">← X</button>
         <button class="sm" data-nudge="exp:dx:1">X →</button>
         <button class="sm" data-nudge="exp:dy:-1">↑ Y</button>
         <button class="sm" data-nudge="exp:dy:1">Y ↓</button>
 
-        <span style="margin-left:8px;"><strong>Quickslots (Green Grid):</strong></span>
+        <span style="margin-left:8px;"><strong>Quickslots Nudge:</strong></span>
         <button class="sm" data-nudge="qs:dx:-1">← X</button>
         <button class="sm" data-nudge="qs:dx:1">X →</button>
         <button class="sm" data-nudge="qs:dy:-1">↑ Y</button>
         <button class="sm" data-nudge="qs:dy:1">Y ↓</button>
 
         <div style="margin-left:auto; display:flex; gap:6px;">
-          <button class="sm" id="btnClearMesoRegion">Clear meso region</button>
-          <button class="sm" id="btnResetHudOffset">Reset auto regions</button>
+          <button class="sm" id="btnResetHudOffset">Return all to 100% Auto-Detect</button>
         </div>
       </div>
     </div>
 
+    <!-- Quickslot Potions Card -->
     <div class="card">
       <div class="card-head">
         <div>
@@ -510,7 +649,7 @@
       <table>
         <thead>
           <tr>
-            <th>Date / Map</th>
+            <th>Date / Map(s)</th>
             <th>Grind Time</th>
             <th>EXP / hr</th>
             <th>Gross Mesos</th>
@@ -555,7 +694,6 @@
       const q = Math.floor((L * L) / 3);
       return (q + 19) * q;
     }
-    // Lv 50 -> 51 is q=833 -> 852*833 = 709,716; Lv 51..89 scales by ~1.0548/level
     const base50 = 709716;
     if (L <= 89) {
       let val = base50;
@@ -596,6 +734,17 @@
     currentExp: null,
     currentPct: 0,
     expGained: 0,
+
+    expSamples: [],
+    chartMode: 'gain',
+    chartPointsMeta: [],
+
+    currentMap: 'Unknown Map',
+    pendingMapCandidate: '',
+    pendingMapStreak: 0,
+    mapVisits: [],
+    activeVisitIdx: -1,
+
     recentCaptures: [],
 
     lastMeso: null,
@@ -611,8 +760,9 @@
       exp: { dx: 0, dy: 0 },
       qs:  { dx: 0, dy: 0 }
     }),
-    customNorm: safeLoad('ms_customNorm_v2', {
+    customNorm: safeLoad('ms_customNorm_v4', {
       exp:  null,
+      map:  null,
       meso: null,
       qs:   null
     }),
@@ -630,13 +780,17 @@
     updateUI();
   });
 
-  function updateSetupHighlights() {
-    $('btnDrawExp').classList.toggle('needs-setup', !state.customNorm.exp);
+  function updateModeBadges() {
+    $('expModeTag').textContent = state.customNorm.exp ? 'MANUAL' : 'AUTO';
+    $('mapModeTag').textContent = state.customNorm.map ? 'MANUAL' : 'AUTO';
+    $('mesoModeTag').textContent = state.customNorm.meso ? 'MANUAL' : 'AUTO';
   }
-  updateSetupHighlights();
+  updateModeBadges();
 
   let ocrWorker = null;
+  let mapOcrWorker = null;
   let ocrBusy = false;
+  let scanCycle = 0;
   let timerWorker = null;
   let pipWindow = null;
 
@@ -662,7 +816,14 @@
         tessedit_char_whitelist: '0123456789.,[]%',
         tessedit_pageseg_mode: '7'
       });
-      $('detectedRes').textContent = 'OCR Engine: Ready (Grayscale LSTM)';
+
+      mapOcrWorker = await Tesseract.createWorker('eng');
+      await mapOcrWorker.setParameters({
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 :'-<>()[]&.",
+        tessedit_pageseg_mode: '7'
+      });
+
+      $('detectedRes').textContent = 'OCR Engine: Ready (Zero-Click Auto-Detect)';
     } catch (e) {
       $('detectedRes').textContent = 'OCR Engine: Error';
       console.error(e);
@@ -670,15 +831,333 @@
   }
   initOcr();
 
-  // --- Grayscale Contrast-Stretched OCR Reader (Preserves Anti-Aliased Strokes for Tesseract LSTM) ---
-  async function readLineGrayscale(srcCanvas, sx, sy, sw, sh, mode = 'white-on-dark', debugCanvasId = null) {
-    if (!ocrWorker || sw <= 2 || sh <= 2) return '';
+  // --- Per-Map Visit Lifecycle & Attribution ---
+  function ensureActiveMapVisit(mapName = state.currentMap) {
+    if (state.activeVisitIdx >= 0 && state.mapVisits[state.activeVisitIdx]) {
+      return state.mapVisits[state.activeVisitIdx];
+    }
+    const visit = {
+      map: mapName || 'Unknown Map',
+      startExpSec: state.expSeconds,
+      expSeconds: 0,
+      mesoSeconds: 0,
+      expGained: 0,
+      grossMeso: 0,
+      potBurn: 0,
+      potsUsed: 0
+    };
+    state.mapVisits.push(visit);
+    state.activeVisitIdx = state.mapVisits.length - 1;
+    return visit;
+  }
+
+  function switchActiveMap(newMapName) {
+    const clean = (newMapName || '').trim();
+    if (!clean || clean === state.currentMap) return;
+
+    const prevMap = state.currentMap;
+    state.currentMap = clean;
+    $('headerMapBadge').textContent = `📍 Map: ${clean}`;
+    $('readMap').textContent = clean;
+
+    if (state.activeVisitIdx >= 0 && state.mapVisits[state.activeVisitIdx]) {
+      const cur = state.mapVisits[state.activeVisitIdx];
+      if (prevMap === 'Unknown Map' && cur.expSeconds < 12 && cur.expGained === 0) {
+        cur.map = clean;
+        renderPerMapTable();
+        drawExpChart();
+        return;
+      }
+    }
+
+    state.mapVisits.push({
+      map: clean,
+      startExpSec: state.expSeconds,
+      expSeconds: 0,
+      mesoSeconds: 0,
+      expGained: 0,
+      grossMeso: 0,
+      potBurn: 0,
+      potsUsed: 0
+    });
+    state.activeVisitIdx = state.mapVisits.length - 1;
+    renderPerMapTable();
+    drawExpChart();
+  }
+
+  $('btnSetManualMap').addEventListener('click', () => {
+    const val = $('manualMapInput').value.trim();
+    if (!val) return;
+    state.pendingMapCandidate = val;
+    state.pendingMapStreak = 2;
+    switchActiveMap(val);
+    $('manualMapInput').value = '';
+  });
+
+  function renderPerMapTable() {
+    const tbody = $('perMapTableBody');
+    $('mapVisitCountPill').textContent = `${state.mapVisits.length} VISIT${state.mapVisits.length === 1 ? '' : 'S'}`;
+
+    if (!state.mapVisits.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">Start grinding to record per-map EXP & profit rates.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = [...state.mapVisits].reverse().map((v, revIdx) => {
+      const isCurrent = (state.mapVisits.length - 1 - revIdx) === state.activeVisitIdx;
+      const expHr = v.expSeconds > 0 ? Math.round((v.expGained / v.expSeconds) * 3600) : 0;
+      const net = v.grossMeso - v.potBurn;
+      const netHr = v.mesoSeconds > 0 ? Math.round((net / v.mesoSeconds) * 3600) : 0;
+      return `
+        <tr style="${isCurrent ? 'background: rgba(79,140,255,0.08);' : ''}">
+          <td>
+            <strong>${v.map}</strong> ${isCurrent ? '<span style="color:var(--green);font-size:0.7rem;">● NOW</span>' : ''}
+            <div style="font-size:0.71rem; color:var(--muted);">+${fmtNum(v.expGained)} EXP · ${v.potsUsed} pots</div>
+          </td>
+          <td style="font-variant-numeric:tabular-nums;">${fmtTime(v.expSeconds)}</td>
+          <td class="val-blue" style="font-variant-numeric:tabular-nums;"><strong>${fmtNum(expHr)}</strong></td>
+          <td class="${netHr >= 0 ? 'val-green' : 'val-red'}" style="font-variant-numeric:tabular-nums;">
+            <strong>${netHr >= 0 ? '+' : ''}${fmtNum(netHr)}</strong>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // --- Trailing 5-Minute EXP Pace Calculator ---
+  function computeTrailing5MinPace() {
+    const now = state.expSeconds;
+    const samples = state.expSamples;
+    if (now < 5 || samples.length < 2) {
+      return { expHr: 0, chunk5m: 0, windowSec: 0 };
+    }
+
+    const targetT = Math.max(0, now - 300);
+    let base = samples[0];
+    for (let i = 0; i < samples.length; i++) {
+      if (samples[i].t <= targetT) {
+        base = samples[i];
+      } else {
+        break;
+      }
+    }
+
+    const windowSec = Math.max(1, now - base.t);
+    const gainedInWindow = Math.max(0, state.expGained - base.expGained);
+    const expHr = (gainedInWindow / windowSec) * 3600;
+    const chunk5m = (gainedInWindow / windowSec) * 300;
+    return { expHr, chunk5m, windowSec };
+  }
+
+  // --- Interactive HTML5 Canvas EXP Over Time Chart ---
+  function drawExpChart() {
+    const canvas = $('expChartCanvas');
+    const wrap = $('chartWrap');
+    if (!canvas || !wrap) return;
+
+    const rect = wrap.getBoundingClientRect();
+    const cssW = Math.max(300, Math.floor(rect.width || 560));
+    const cssH = Math.max(180, Math.floor(rect.height || 225));
+    const dpr = window.devicePixelRatio || 1;
+
+    if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
+    }
+
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    const padL = 54, padR = 16, padT = 18, padB = 26;
+    const plotW = cssW - padL - padR;
+    const plotH = cssH - padT - padB;
+
+    ctx.strokeStyle = '#1f2433';
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= 4; g++) {
+      const gy = padT + (plotH * g) / 4;
+      ctx.beginPath();
+      ctx.moveTo(padL, gy);
+      ctx.lineTo(padL + plotW, gy);
+      ctx.stroke();
+    }
+
+    const samples = state.expSamples;
+    $('chartSubLabel').textContent = `${samples.length} sample${samples.length === 1 ? '' : 's'} · ${state.chartMode === 'gain' ? 'Cumulative EXP gained' : 'Rolling 5-min EXP/hr pace'}`;
+
+    if (samples.length < 2) {
+      ctx.fillStyle = '#8b93a7';
+      ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('EXP curve will appear after 2+ captures while grinding', padL + plotW / 2, padT + plotH / 2);
+      state.chartPointsMeta = [];
+      ctx.restore();
+      return;
+    }
+
+    const series = samples.map((s, idx) => {
+      let rateHr = 0;
+      if (idx > 0) {
+        const targetT = Math.max(0, s.t - 300);
+        let b = samples[0];
+        for (let j = 0; j < idx; j++) {
+          if (samples[j].t <= targetT) b = samples[j];
+          else break;
+        }
+        const dt = Math.max(1, s.t - b.t);
+        rateHr = ((s.expGained - b.expGained) / dt) * 3600;
+      }
+      return {
+        t: s.t,
+        val: state.chartMode === 'gain' ? s.expGained : rateHr,
+        expGained: s.expGained,
+        rateHr,
+        map: s.map || state.currentMap
+      };
+    });
+
+    const minT = series[0].t;
+    const maxT = Math.max(minT + 10, series[series.length - 1].t);
+    const maxVal = Math.max(100, ...series.map(p => p.val)) * 1.1;
+
+    ctx.fillStyle = '#8b93a7';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let g = 0; g <= 4; g++) {
+      const v = maxVal * (1 - g / 4);
+      const gy = padT + (plotH * g) / 4;
+      ctx.fillText(fmtCompact(v), padL - 6, gy);
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (let g = 0; g <= 4; g++) {
+      const tTick = minT + ((maxT - minT) * g) / 4;
+      const gx = padL + (plotW * g) / 4;
+      const mins = Math.floor(tTick / 60);
+      const secs = Math.floor(tTick % 60);
+      ctx.fillText(`${mins}m${secs < 10 ? '0' : ''}${secs}s`, gx, padT + plotH + 6);
+    }
+
+    for (let vIdx = 1; vIdx < state.mapVisits.length; vIdx++) {
+      const mv = state.mapVisits[vIdx];
+      if (mv.startExpSec >= minT && mv.startExpSec <= maxT) {
+        const mx = padL + ((mv.startExpSec - minT) / (maxT - minT)) * plotW;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.65)';
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(mx, padT);
+        ctx.lineTo(mx, padT + plotH);
+        ctx.stroke();
+        ctx.fillStyle = '#d8b4fe';
+        ctx.font = '9px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(mv.map.slice(0, 18), Math.min(cssW - 85, mx + 3), padT + 2);
+        ctx.restore();
+      }
+    }
+
+    const pts = series.map(p => ({
+      x: padL + ((p.t - minT) / (maxT - minT)) * plotW,
+      y: padT + plotH - (p.val / maxVal) * plotH,
+      ...p
+    }));
+    state.chartPointsMeta = pts;
+
+    const lineColor = state.chartMode === 'gain' ? '#4f8cff' : '#a855f7';
+    const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+    grad.addColorStop(0, state.chartMode === 'gain' ? 'rgba(79, 140, 255, 0.28)' : 'rgba(168, 85, 247, 0.28)');
+    grad.addColorStop(1, 'rgba(15, 17, 23, 0.0)');
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, padT + plotH);
+    for (const pt of pts) ctx.lineTo(pt.x, pt.y);
+    ctx.lineTo(pts[pts.length - 1].x, padT + plotH);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const last = pts[pts.length - 1];
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  $('btnChartModeGain').addEventListener('click', () => {
+    state.chartMode = 'gain';
+    $('btnChartModeGain').classList.add('active-tool');
+    $('btnChartModeRate').classList.remove('active-tool');
+    drawExpChart();
+  });
+
+  $('btnChartModeRate').addEventListener('click', () => {
+    state.chartMode = 'rate';
+    $('btnChartModeRate').classList.add('active-tool');
+    $('btnChartModeGain').classList.remove('active-tool');
+    drawExpChart();
+  });
+
+  $('expChartCanvas').addEventListener('mousemove', e => {
+    const pts = state.chartPointsMeta;
+    const tip = $('chartTooltip');
+    if (!pts || !pts.length) {
+      tip.style.display = 'none';
+      return;
+    }
+    const rect = $('expChartCanvas').getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    let nearest = pts[0];
+    let bestDist = Math.abs(mx - pts[0].x);
+    for (const pt of pts) {
+      const d = Math.abs(mx - pt.x);
+      if (d < bestDist) {
+        bestDist = d;
+        nearest = pt;
+      }
+    }
+    tip.style.display = 'block';
+    tip.innerHTML = `
+      <div><strong>${nearest.map}</strong> · ${fmtTime(nearest.t)}</div>
+      <div style="color:#4f8cff;">Session EXP: +${fmtNum(nearest.expGained)}</div>
+      <div style="color:#c084fc;">5m Pace: ${fmtNum(nearest.rateHr)} / hr</div>
+    `;
+    const leftPos = Math.min(rect.width - 175, Math.max(8, nearest.x + 10));
+    const topPos = Math.max(8, nearest.y - 44);
+    tip.style.left = `${leftPos}px`;
+    tip.style.top = `${topPos}px`;
+  });
+
+  $('expChartCanvas').addEventListener('mouseleave', () => {
+    $('chartTooltip').style.display = 'none';
+  });
+  window.addEventListener('resize', drawExpChart);
+
+  // --- Grayscale Contrast-Stretched OCR Reader ---
+  async function readLineGrayscale(srcCanvas, sx, sy, sw, sh, mode = 'white-on-dark', debugCanvasId = null, workerOverride = null) {
+    const activeWorker = workerOverride || ocrWorker;
+    if (!activeWorker || sw <= 2 || sh <= 2) return '';
 
     const ctx = srcCanvas.getContext('2d', { willReadFrequently: true });
     const img = ctx.getImageData(sx, sy, sw, sh);
     const d = img.data;
 
-    // Compute luminance and dynamic contrast bounds so YUV 4:2:0 dimmed strokes stay crisp
     const lumArr = new Float32Array(sw * sh);
     let minL = 255, maxL = 0;
     for (let p = 0; p < sw * sh; p++) {
@@ -698,9 +1177,7 @@
 
     for (let p = 0; p < sw * sh; p++) {
       let norm = ((lumArr[p] - minL) / span) * 255;
-      // Tesseract expects dark text on a white background
       let gray = mode === 'white-on-dark' ? (255 - norm) : norm;
-      // Gentle S-curve contrast boost without destroying anti-aliased edges
       gray = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 128));
       tImg.data[p * 4] = gray;
       tImg.data[p * 4 + 1] = gray;
@@ -728,11 +1205,11 @@
       dbg.getContext('2d').drawImage(scaleCanvas, pad, pad, uw, uh, 0, 0, uw, uh);
     }
 
-    const { data: { text } } = await ocrWorker.recognize(scaleCanvas);
+    const { data: { text } } = await activeWorker.recognize(scaleCanvas);
     return (text || '').trim();
   }
 
-  // --- Quickslot Local-Contrast Stack Reader (Bottom-Left 18x10 Corner) ---
+  // --- Quickslot Local-Contrast Stack Reader ---
   async function readQuickslotDigits(srcCanvas, sx, sy, sw, sh, debugCanvasId = null) {
     if (!ocrWorker || sw <= 2 || sh <= 2) return '';
     const ctx = srcCanvas.getContext('2d', { willReadFrequently: true });
@@ -745,7 +1222,6 @@
       lum[p] = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
     }
 
-    // Highlight white font cores that sit adjacent to dark 1px outlines (handles YUV 4:2:0 & transparent slots)
     const tmp = document.createElement('canvas');
     tmp.width = sw;
     tmp.height = sh;
@@ -807,19 +1283,21 @@
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       $(btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'tab-live') drawExpChart();
     });
   });
 
-  // --- Drag-to-Calibrate Buttons ---
+  // --- Optional Manual Override Draw Buttons ---
   function armDrawTool(target, btnId) {
     state.drawTarget = state.drawTarget === target ? null : target;
-    ['btnDrawExp', 'btnDrawMeso', 'btnDrawQs'].forEach(id => {
+    ['btnDrawExp', 'btnDrawMap', 'btnDrawMeso', 'btnDrawQs'].forEach(id => {
       $(id).classList.toggle('active-tool', id === btnId && state.drawTarget === target);
     });
     overlayCanvas.style.cursor = state.drawTarget ? 'crosshair' : 'default';
   }
 
   $('btnDrawExp').addEventListener('click', () => armDrawTool('exp', 'btnDrawExp'));
+  $('btnDrawMap').addEventListener('click', () => armDrawTool('map', 'btnDrawMap'));
   $('btnDrawMeso').addEventListener('click', () => armDrawTool('meso', 'btnDrawMeso'));
   $('btnDrawQs').addEventListener('click', () => armDrawTool('qs', 'btnDrawQs'));
 
@@ -851,15 +1329,15 @@
 
     if (w > 0.008 && h > 0.006) {
       state.customNorm[state.drawTarget] = { x, y, w, h };
-      localStorage.setItem('ms_customNorm_v2', JSON.stringify(state.customNorm));
-      updateSetupHighlights();
+      localStorage.setItem('ms_customNorm_v4', JSON.stringify(state.customNorm));
+      updateModeBadges();
     }
     state.dragStart = null;
     state.dragCurrent = null;
     state.drawTarget = null;
-    ['btnDrawExp', 'btnDrawMeso', 'btnDrawQs'].forEach(id => $(id).classList.remove('active-tool'));
+    ['btnDrawExp', 'btnDrawMap', 'btnDrawMeso', 'btnDrawQs'].forEach(id => $(id).classList.remove('active-tool'));
     overlayCanvas.style.cursor = 'default';
-    scanFrame();
+    scanFrame(true);
   });
 
   document.querySelectorAll('[data-nudge]').forEach(btn => {
@@ -871,19 +1349,13 @@
     });
   });
 
-  $('btnClearMesoRegion').addEventListener('click', () => {
-    state.customNorm.meso = null;
-    localStorage.setItem('ms_customNorm_v2', JSON.stringify(state.customNorm));
-    scanFrame();
-  });
-
   $('btnResetHudOffset').addEventListener('click', () => {
     state.offsets = { exp: { dx: 0, dy: 0 }, qs: { dx: 0, dy: 0 } };
-    state.customNorm = { exp: null, meso: null, qs: null };
+    state.customNorm = { exp: null, map: null, meso: null, qs: null };
     localStorage.setItem('ms_offsets_v6', JSON.stringify(state.offsets));
-    localStorage.setItem('ms_customNorm_v2', JSON.stringify(state.customNorm));
-    updateSetupHighlights();
-    scanFrame();
+    localStorage.setItem('ms_customNorm_v4', JSON.stringify(state.customNorm));
+    updateModeBadges();
+    scanFrame(true);
   });
 
   $('chkTrackPots').addEventListener('change', e => {
@@ -1059,7 +1531,7 @@
     };
   }
 
-  // --- Bottom-Anchored HUD Detector (Accounts for Windows DWM Borders) ---
+  // --- ZERO-CLICK LANDMARK HUD DETECTOR (LV., EXP, Minimap Header, Quickslots) ---
   function detectBottomHud(w, h, data) {
     let clientW = w;
     let gameLeft = 0;
@@ -1074,11 +1546,51 @@
       gameLeft = Math.floor((w - 800) / 2);
     }
 
-    // Account for Windows 10/11 ~7px bottom frame when height > 768 or > 600
     let gameBottom = h - 1;
-    if (h > 768 && h <= 815) gameBottom = h - 8;
-    else if (h > 600 && h <= 645) gameBottom = h - 8;
+    let gameTop = 0;
+    if (h > 768 && h <= 815) {
+      gameBottom = h - 8;
+      gameTop = Math.max(0, gameBottom - 767);
+    } else if (h > 600 && h <= 645) {
+      gameBottom = h - 8;
+      gameTop = Math.max(0, gameBottom - 599);
+    }
 
+    const isGoldBadgePixel = (x, y) => {
+      if (x < 0 || y < 0 || x >= w || y >= h) return false;
+      const i = (y * w + x) * 4;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      return r > 205 && g > 165 && b < 85 && (r - b) > 125;
+    };
+
+    // 1. Auto-Detect Character Level Badge ("LV." on bottom-left HUD)
+    let levelRect = null;
+    const lvX0 = gameLeft + 10;
+    const lvX1 = gameLeft + Math.round(clientW * 0.14);
+    const lvY0 = Math.max(0, gameBottom - 36);
+    const lvY1 = Math.max(0, gameBottom - 3);
+    let lvMaxX = -1, lvSumY = 0, lvHits = 0;
+
+    for (let y = lvY0; y <= lvY1; y++) {
+      for (let x = lvX0; x <= lvX1; x++) {
+        if (isGoldBadgePixel(x, y)) {
+          lvHits++;
+          if (x > lvMaxX) lvMaxX = x;
+          lvSumY += y;
+        }
+      }
+    }
+    if (lvHits >= 12 && lvMaxX > 0) {
+      const cy = Math.round(lvSumY / lvHits);
+      levelRect = {
+        x: Math.min(w - 40, lvMaxX + 2),
+        y: Math.max(0, cy - 8),
+        w: 36,
+        h: 16
+      };
+    }
+
+    // 2. Auto-Detect EXP Bar via Gold "EXP" Label Landmark + White Text Cluster
     let expRect;
     if (state.customNorm.exp) {
       const c = state.customNorm.exp;
@@ -1089,49 +1601,179 @@
         h: Math.round(c.h * h)
       };
     } else {
-      // Scan the EXP section on the right side of the status bar (60% to 86% of client width)
-      const bandX0 = gameLeft + Math.round(clientW * 0.60);
-      const bandX1 = gameLeft + Math.round(clientW * 0.86);
-      const bandY0 = Math.max(0, gameBottom - 18);
-      const bandY1 = Math.max(0, gameBottom - 2);
+      const expSearchX0 = gameLeft + Math.round(clientW * 0.45);
+      const expSearchX1 = gameLeft + Math.round(clientW * 0.72);
+      const expSearchY0 = Math.max(0, gameBottom - 34);
+      const expSearchY1 = Math.max(0, gameBottom - 2);
 
-      let minTextX = bandX1, maxTextX = bandX0;
-      let minTextY = bandY1, maxTextY = bandY0;
-      let whiteTextHits = 0;
+      // Find the densest horizontal cluster of gold "EXP" label pixels
+      let bestBadgeRightX = -1;
+      let bestBadgeCenterY = -1;
+      let bestClusterCount = 0;
 
-      for (let y = bandY0; y <= bandY1; y++) {
-        for (let x = bandX0; x <= bandX1; x++) {
-          const i = (y * w + x) * 4;
-          const r = data[i], g = data[i + 1], b = data[i + 2];
-          if (r > 205 && g > 205 && b > 205 && Math.abs(r - b) < 30) {
-            whiteTextHits++;
-            if (x < minTextX) minTextX = x;
-            if (x > maxTextX) maxTextX = x;
-            if (y < minTextY) minTextY = y;
-            if (y > maxTextY) maxTextY = y;
+      for (let y = expSearchY0; y <= expSearchY1 - 6; y++) {
+        for (let x = expSearchX0; x <= expSearchX1 - 18; x++) {
+          let hits = 0;
+          let rightMost = x;
+          for (let dy = 0; dy < 8; dy++) {
+            for (let dx = 0; dx < 22; dx++) {
+              if (isGoldBadgePixel(x + dx, y + dy)) {
+                hits++;
+                if (x + dx > rightMost) rightMost = x + dx;
+              }
+            }
+          }
+          if (hits > bestClusterCount) {
+            bestClusterCount = hits;
+            bestBadgeRightX = rightMost;
+            bestBadgeCenterY = y + 4;
           }
         }
       }
 
-      if (whiteTextHits >= 15 && (maxTextX - minTextX) >= 40) {
+      if (bestClusterCount >= 14 && bestBadgeRightX > 0) {
+        // Refine exact white text bounds immediately to the right of the gold EXP label
+        const scanX0 = bestBadgeRightX + 4;
+        const scanX1 = Math.min(gameLeft + Math.round(clientW * 0.88), scanX0 + 230);
+        const scanY0 = Math.max(0, bestBadgeCenterY - 8);
+        const scanY1 = Math.min(gameBottom, bestBadgeCenterY + 8);
+
+        let minTX = scanX1, maxTX = scanX0, tHits = 0;
+        for (let ty = scanY0; ty <= scanY1; ty++) {
+          for (let tx = scanX0; tx <= scanX1; tx++) {
+            const i = (ty * w + tx) * 4;
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            if (r > 205 && g > 205 && b > 205 && Math.abs(r - b) < 30) {
+              tHits++;
+              if (tx < minTX) minTX = tx;
+              if (tx > maxTX) maxTX = tx;
+            }
+          }
+        }
+
+        const startX = tHits >= 12 ? Math.max(scanX0, minTX - 4) : scanX0 + 18;
+        const boxW = tHits >= 12 ? Math.min(220, Math.max(120, maxTX - startX + 8)) : 185;
         expRect = {
-          x: Math.max(0, minTextX - 4 + state.offsets.exp.dx),
-          y: Math.max(0, minTextY - 3 + state.offsets.exp.dy),
-          w: Math.min(230, Math.max(115, maxTextX - minTextX + 10)),
-          h: Math.min(20, Math.max(14, maxTextY - minTextY + 6))
+          x: Math.max(0, startX + state.offsets.exp.dx),
+          y: Math.max(0, bestBadgeCenterY - 7 + state.offsets.exp.dy),
+          w: boxW,
+          h: 15
         };
       } else {
-        expRect = {
-          x: Math.max(0, gameLeft + Math.round(clientW * 0.64) + state.offsets.exp.dx),
-          y: Math.max(0, gameBottom - 16 + state.offsets.exp.dy),
-          w: 185,
-          h: 15
+        // Fallback: white text scan on bottom-right EXP track
+        const bandX0 = gameLeft + Math.round(clientW * 0.60);
+        const bandX1 = gameLeft + Math.round(clientW * 0.86);
+        const bandY0 = Math.max(0, gameBottom - 18);
+        const bandY1 = Math.max(0, gameBottom - 2);
+
+        let minTextX = bandX1, maxTextX = bandX0;
+        let minTextY = bandY1, maxTextY = bandY0;
+        let whiteTextHits = 0;
+
+        for (let y = bandY0; y <= bandY1; y++) {
+          for (let x = bandX0; x <= bandX1; x++) {
+            const i = (y * w + x) * 4;
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            if (r > 205 && g > 205 && b > 205 && Math.abs(r - b) < 30) {
+              whiteTextHits++;
+              if (x < minTextX) minTextX = x;
+              if (x > maxTextX) maxTextX = x;
+              if (y < minTextY) minTextY = y;
+              if (y > maxTextY) maxTextY = y;
+            }
+          }
+        }
+
+        if (whiteTextHits >= 15 && (maxTextX - minTextX) >= 40) {
+          expRect = {
+            x: Math.max(0, minTextX - 4 + state.offsets.exp.dx),
+            y: Math.max(0, minTextY - 3 + state.offsets.exp.dy),
+            w: Math.min(230, Math.max(115, maxTextX - minTextX + 10)),
+            h: Math.min(20, Math.max(14, maxTextY - minTextY + 6))
+          };
+        } else {
+          expRect = {
+            x: Math.max(0, gameLeft + Math.round(clientW * 0.64) + state.offsets.exp.dx),
+            y: Math.max(0, gameBottom - 16 + state.offsets.exp.dy),
+            w: 185,
+            h: 15
+          };
+        }
+      }
+    }
+
+    // 3. Auto-Detect Top-Left Minimap Header Bar (Map Name Banner)
+    let mapRect;
+    if (state.customNorm.map) {
+      const m = state.customNorm.map;
+      mapRect = {
+        x: Math.round(m.x * w),
+        y: Math.round(m.y * h),
+        w: Math.round(m.w * w),
+        h: Math.round(m.h * h)
+      };
+    } else {
+      // Scan top-left minimap area for crisp white map title text over dark translucent slate/navy header
+      const mX0 = gameLeft + 28;
+      const mX1 = gameLeft + 320;
+      const mY0 = gameTop + 6;
+      const mY1 = gameTop + 72;
+
+      let bestRowY = -1;
+      let bestRowScore = 0;
+      let bestRowMinX = mX1;
+      let bestRowMaxX = mX0;
+
+      for (let y = mY0; y <= mY1; y++) {
+        let whiteCount = 0;
+        let darkBgCount = 0;
+        let rowMinX = mX1;
+        let rowMaxX = mX0;
+
+        for (let x = mX0; x <= mX1; x++) {
+          const i = (y * w + x) * 4;
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const lum = r * 0.299 + g * 0.587 + b * 0.114;
+          if (r > 205 && g > 205 && b > 205 && Math.abs(r - b) < 35) {
+            whiteCount++;
+            if (x < rowMinX) rowMinX = x;
+            if (x > rowMaxX) rowMaxX = x;
+          } else if (lum < 95 && b >= r) {
+            darkBgCount++;
+          }
+        }
+
+        const span = rowMaxX - rowMinX;
+        if (whiteCount >= 14 && darkBgCount >= 60 && span >= 35 && span <= 240) {
+          const score = whiteCount * 2 + darkBgCount;
+          if (score > bestRowScore) {
+            bestRowScore = score;
+            bestRowY = y;
+            bestRowMinX = rowMinX;
+            bestRowMaxX = rowMaxX;
+          }
+        }
+      }
+
+      if (bestRowY > 0) {
+        mapRect = {
+          x: Math.max(gameLeft + 6, bestRowMinX - 6),
+          y: Math.max(gameTop + 2, bestRowY - 8),
+          w: Math.min(265, Math.max(145, bestRowMaxX - bestRowMinX + 24)),
+          h: 18
+        };
+      } else {
+        mapRect = {
+          x: gameLeft + 44,
+          y: gameTop + 23,
+          w: 215,
+          h: 18
         };
       }
     }
 
     const qsRect = findQuickslotPanel(w, h, data, gameLeft, clientW, gameBottom);
-    return { clientW, gameBottom, expRect, qsRect };
+    return { clientW, gameBottom, levelRect, expRect, mapRect, qsRect };
   }
 
   // --- Recessed Light-Grey / White Meso Box Detector ---
@@ -1181,7 +1823,6 @@
         const boxW = boxRight - boxLeft + 1;
         if (boxW < 68 || boxW > 95) continue;
 
-        // Confirm gold MESO coin icon to the left of boxLeft
         let goldPixels = 0;
         for (let gy = boxTop - 1; gy <= boxBottom + 1; gy++) {
           for (let gx = boxLeft - 38; gx <= boxLeft - 3; gx++) {
@@ -1214,20 +1855,30 @@
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     state.recentCaptures.unshift({
       time: timeStr,
-      text: `Lv. ${state.level} · ${fmtNum(expVal)} EXP (${pctVal.toFixed(2)}%)`
+      map: state.currentMap,
+      text: `Lv.${state.level} · ${fmtNum(expVal)} (${pctVal.toFixed(2)}%)`
     });
     if (state.recentCaptures.length > 4) state.recentCaptures.pop();
 
     const listEl = $('recentReadsList');
     if (listEl) {
       listEl.innerHTML = state.recentCaptures
-        .map(c => `<div class="recent-row"><span>${c.time}</span><span>${c.text}</span></div>`)
+        .map(c => `<div class="recent-row"><span>${c.time} · ${c.map.slice(0, 16)}</span><span>${c.text}</span></div>`)
         .join('');
     }
   }
 
+  function cleanMapOcrString(raw) {
+    if (!raw) return '';
+    return raw
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9>\)\]]+$/g, '')
+      .trim();
+  }
+
   // --- Main Frame Scanner ---
-  async function scanFrame() {
+  async function scanFrame(forceAllRead = false) {
     if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
 
     const vw = video.videoWidth;
@@ -1245,12 +1896,24 @@
     overlayCanvas.height = vh;
     oCtx.drawImage(workCanvas, 0, 0);
 
+    // 0. Level Box Overlay (Cyan)
+    if (hud.levelRect) {
+      oCtx.strokeStyle = '#06b6d4';
+      oCtx.lineWidth = 2;
+      oCtx.strokeRect(hud.levelRect.x, hud.levelRect.y, hud.levelRect.w, hud.levelRect.h);
+    }
+
     // 1. EXP Box Overlay (Blue)
     oCtx.strokeStyle = '#4f8cff';
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h);
 
-    // 2. Quickslot Outer Grid + Individual 32x32 Slot Thumbnails (Green)
+    // 2. Map Name Box Overlay (Purple)
+    oCtx.strokeStyle = '#a855f7';
+    oCtx.lineWidth = 2;
+    oCtx.strokeRect(hud.mapRect.x, hud.mapRect.y, hud.mapRect.w, hud.mapRect.h);
+
+    // 3. Quickslot Outer Grid + Individual 32x32 Slot Thumbnails (Green)
     oCtx.strokeStyle = '#22c55e';
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.qsRect.x, hud.qsRect.y, hud.qsRect.w, hud.qsRect.h);
@@ -1269,7 +1932,7 @@
       }
     }
 
-    // 3. Inventory Meso Overlay (Amber)
+    // 4. Inventory Meso Overlay (Amber)
     if (inv) {
       oCtx.strokeStyle = '#f59e0b';
       oCtx.lineWidth = 2;
@@ -1297,6 +1960,15 @@
       0, 0, hud.expRect.w, hud.expRect.h
     );
 
+    const mapCrop = $('cropMap');
+    mapCrop.width = hud.mapRect.w;
+    mapCrop.height = hud.mapRect.h;
+    mapCrop.getContext('2d').drawImage(
+      workCanvas,
+      hud.mapRect.x, hud.mapRect.y, hud.mapRect.w, hud.mapRect.h,
+      0, 0, hud.mapRect.w, hud.mapRect.h
+    );
+
     if (inv) {
       const mesoCrop = $('cropMeso');
       mesoCrop.width = inv.mesoRect.w;
@@ -1310,14 +1982,58 @@
 
     if (ocrBusy) return;
     ocrBusy = true;
+    scanCycle++;
 
     try {
-      // A. Read EXP Bar (Supports full "772,854 [68.26%]" OR raw integer "772,854" via Lv table)
+      // A0. Auto-Read Character Level on initial capture or every 15th cycle
+      if (hud.levelRect && ocrWorker && (forceAllRead || scanCycle === 1 || scanCycle % 15 === 0)) {
+        const rawLvStr = await readLineGrayscale(
+          workCanvas,
+          hud.levelRect.x, hud.levelRect.y, hud.levelRect.w, hud.levelRect.h,
+          'white-on-dark',
+          null,
+          ocrWorker
+        );
+        const lvDigits = parseInt(rawLvStr.replace(/[^\d]/g, ''), 10);
+        if (!isNaN(lvDigits) && lvDigits >= 1 && lvDigits <= 100 && Math.abs(lvDigits - state.level) <= 5) {
+          state.level = lvDigits;
+          $('charLevelInput').value = lvDigits;
+          localStorage.setItem('ms_charLevel_v1', JSON.stringify(lvDigits));
+        }
+      }
+
+      // A. Read Map Name
+      if (mapOcrWorker && (forceAllRead || scanCycle === 1 || scanCycle % 3 === 0)) {
+        const rawMapStr = await readLineGrayscale(
+          workCanvas,
+          hud.mapRect.x, hud.mapRect.y, hud.mapRect.w, hud.mapRect.h,
+          'white-on-dark',
+          'binMap',
+          mapOcrWorker
+        );
+        const cleanedMap = cleanMapOcrString(rawMapStr);
+        if (cleanedMap.length >= 4 && /[A-Za-z]{3,}/.test(cleanedMap)) {
+          $('readMap').textContent = cleanedMap;
+          if (cleanedMap.toLowerCase() === state.pendingMapCandidate.toLowerCase()) {
+            state.pendingMapStreak += 1;
+            if (state.pendingMapStreak >= 2) {
+              switchActiveMap(cleanedMap);
+            }
+          } else {
+            state.pendingMapCandidate = cleanedMap;
+            state.pendingMapStreak = 1;
+            if (forceAllRead) switchActiveMap(cleanedMap);
+          }
+        }
+      }
+
+      // B. Read EXP Bar
       const rawExpStr = await readLineGrayscale(
         workCanvas,
         hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h,
         'white-on-dark',
-        'binExp'
+        'binExp',
+        ocrWorker
       );
 
       let parsedExp = null;
@@ -1329,7 +2045,6 @@
         parsedExp = parseInt(fullMatch[1].replace(/[^\d]/g, ''), 10);
         parsedPct = parseFloat(fullMatch[2]);
       } else {
-        // Fallback: extract leading EXP integer before '[' or space and compute % from MapleStory Classic EXP table
         const intOnly = rawExpStr.split('[')[0].replace(/[^\d]/g, '');
         if (intOnly.length >= 1) {
           parsedExp = parseInt(intOnly, 10);
@@ -1338,33 +2053,51 @@
       }
 
       if (parsedExp !== null && !isNaN(parsedExp)) {
-        $('readExp').textContent = `${fmtNum(parsedExp)} [${parsedPct.toFixed(2)}%]`;
+        $('readExp').textContent = `Lv.${state.level} · ${fmtNum(parsedExp)} [${parsedPct.toFixed(2)}%]`;
 
         if (state.mode === 'grinding') {
+          const activeVisit = ensureActiveMapVisit();
+
           if (state.startExp === null) {
             state.startExp = parsedExp;
             state.currentExp = parsedExp;
             state.currentPct = parsedPct;
+            state.expSamples.push({ t: state.expSeconds, expGained: 0, rawExp: parsedExp, map: state.currentMap });
             pushRecentCapture(parsedExp, parsedPct);
+            drawExpChart();
           } else {
             const delta = parsedExp - state.currentExp;
-            // Normal kill gain OR level-up wrap-around
             if (delta > 0 && delta < 5_000_000) {
               state.expGained += delta;
+              activeVisit.expGained += delta;
               state.currentExp = parsedExp;
               state.currentPct = parsedPct;
+              state.expSamples.push({
+                t: state.expSeconds,
+                expGained: state.expGained,
+                rawExp: parsedExp,
+                map: state.currentMap
+              });
               pushRecentCapture(parsedExp, parsedPct);
+              drawExpChart();
             } else if (delta < 0 && state.currentPct > 85 && parsedPct < 25) {
-              // Level up occurred!
               const prevReq = getExpToNextLevel(state.level);
               const levelGain = Math.max(0, prevReq - state.currentExp) + parsedExp;
               state.level = Math.min(100, state.level + 1);
               $('charLevelInput').value = state.level;
               localStorage.setItem('ms_charLevel_v1', JSON.stringify(state.level));
               state.expGained += levelGain;
+              activeVisit.expGained += levelGain;
               state.currentExp = parsedExp;
               state.currentPct = parsedPct;
+              state.expSamples.push({
+                t: state.expSeconds,
+                expGained: state.expGained,
+                rawExp: parsedExp,
+                map: state.currentMap
+              });
               pushRecentCapture(parsedExp, parsedPct);
+              drawExpChart();
             }
           }
         }
@@ -1372,13 +2105,14 @@
         $('readExp').textContent = `Raw: "${rawExpStr}"`;
       }
 
-      // B. Read Inventory Mesos
+      // C. Read Inventory Mesos
       if (inv) {
         const rawMesoStr = await readLineGrayscale(
           workCanvas,
           inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h,
           'dark-on-white',
-          'binMeso'
+          'binMeso',
+          ocrWorker
         );
         const digits = rawMesoStr.replace(/[^\d]/g, '');
 
@@ -1393,6 +2127,8 @@
               const diff = parsedMeso - state.lastMeso;
               if (diff > 0 && diff < 100_000_000) {
                 state.grossMesoGained += diff;
+                const activeVisit = ensureActiveMapVisit();
+                activeVisit.grossMeso += diff;
               }
               state.lastMeso = parsedMeso;
             }
@@ -1402,7 +2138,7 @@
         }
       }
 
-      // C. Read ONLY Selected/Tracked Quickslots (Strict Bottom-Left 18x10 Quantity Corner)
+      // D. Read ONLY Selected/Tracked Quickslots
       if (state.trackPots) {
         for (let i = 0; i < state.slotCount; i++) {
           const slotKey = `${state.slotCount}_${i}`;
@@ -1432,7 +2168,11 @@
               const prev = state.slotLive[slotKey].lastCount;
               if (prev !== null) {
                 if (count < prev && (prev - count) <= 25 && state.mode === 'grinding') {
-                  state.slotLive[slotKey].used += (prev - count);
+                  const consumed = prev - count;
+                  state.slotLive[slotKey].used += consumed;
+                  const activeVisit = ensureActiveMapVisit();
+                  activeVisit.potsUsed += consumed;
+                  activeVisit.potBurn += consumed * (cfg.cost || 0);
                 } else if (count > prev && (count - prev) <= 2000) {
                   state.slotLive[slotKey].restocked = (state.slotLive[slotKey].restocked || 0) + (count - prev);
                 }
@@ -1449,20 +2189,25 @@
       }
 
       updateUI();
+      renderPerMapTable();
     } finally {
       ocrBusy = false;
     }
   }
 
-  $('btnRescan').addEventListener('click', scanFrame);
-  $('btnRescanQs').addEventListener('click', scanFrame);
+  $('btnRescan').addEventListener('click', () => scanFrame(true));
+  $('btnRescanQs').addEventListener('click', () => scanFrame(false));
 
   $('btnAddMeso').addEventListener('click', () => {
     const val = parseInt($('manualMesoInput').value, 10);
     if (!isNaN(val)) {
       state.manualMesoOffset += val;
+      if (state.activeVisitIdx >= 0 && state.mapVisits[state.activeVisitIdx]) {
+        state.mapVisits[state.activeVisitIdx].grossMeso += val;
+      }
       $('manualMesoInput').value = '';
       updateUI();
+      renderPerMapTable();
     }
   });
 
@@ -1488,7 +2233,7 @@
       setMode('grinding');
 
       startBackgroundTimer();
-      scanFrame();
+      scanFrame(true);
     } catch (err) {
       $('statusBadge').textContent = 'Share Cancelled';
       console.error('Capture error:', err);
@@ -1505,14 +2250,22 @@
       if (state.mode === 'grinding') {
         state.expSeconds += 1;
         state.mesoSeconds += 1;
+        const v = ensureActiveMapVisit();
+        v.expSeconds += 1;
+        v.mesoSeconds += 1;
       } else if (state.mode === 'npc') {
         state.mesoSeconds += 1;
+        const v = ensureActiveMapVisit();
+        v.mesoSeconds += 1;
       }
       updateUI();
 
       tick++;
       if (tick % 2 === 0 && video.readyState >= 2) {
-        scanFrame();
+        scanFrame(false);
+      }
+      if (tick % 5 === 0 && state.expSamples.length >= 2) {
+        drawExpChart();
       }
     };
   }
@@ -1556,15 +2309,28 @@
     $('kpiExpHr').textContent = fmtNum(expPerHr);
     $('kpiExpSub').textContent = `Session: +${fmtNum(state.expGained)} EXP`;
 
+    const pace = computeTrailing5MinPace();
+    $('kpiPace5mHr').textContent = `${fmtNum(pace.expHr)} / hr`;
+    if (pace.windowSec >= 5) {
+      const wMins = Math.floor(pace.windowSec / 60);
+      const wSecs = Math.floor(pace.windowSec % 60);
+      $('paceWindowTag').textContent = pace.windowSec >= 295 ? 'Last 5m' : `${wMins}m ${wSecs}s`;
+      $('kpiPace5mChunk').textContent = `+${fmtNum(pace.chunk5m)} / 5m · over ${wMins > 0 ? wMins + 'm ' : ''}${wSecs}s`;
+    } else {
+      $('paceWindowTag').textContent = 'Last 5m';
+      $('kpiPace5mChunk').textContent = '+0 / 5m · Waiting for kills';
+    }
+
     const pct = state.currentExp !== null
       ? Math.min(99.99, (state.currentExp / reqExp) * 100)
       : state.currentPct;
     $('kpiCurrentExp').textContent = `${pct.toFixed(2)}% · Current: ${fmtNum(state.currentExp || 0)} / ${fmtNum(reqExp)} EXP`;
 
+    const effectiveRate = pace.expHr > 0 ? pace.expHr : expPerHr;
     let ttlStr = '--:--';
-    if (expPerHr > 0 && state.currentExp !== null) {
+    if (effectiveRate > 0 && state.currentExp !== null) {
       const remainingExp = Math.max(0, reqExp - state.currentExp);
-      const minsLeft = Math.round((remainingExp / expPerHr) * 60);
+      const minsLeft = Math.round((remainingExp / effectiveRate) * 60);
       ttlStr = `${Math.floor(minsLeft / 60)}h ${minsLeft % 60}m`;
     }
     $('kpiTtl').textContent = ttlStr;
@@ -1592,7 +2358,7 @@
         pStatus.textContent = state.mode === 'grinding' ? 'Grinding' : state.mode === 'npc' ? 'NPC Sell' : state.mode === 'paused' ? 'Paused' : 'Idle';
         pDoc.getElementById('pipClock').textContent = fmtTime(state.mode === 'npc' ? state.mesoSeconds : state.expSeconds);
         pDoc.getElementById('pipTtl').textContent = ttlStr;
-        pDoc.getElementById('pipExp').textContent = fmtCompact(expPerHr);
+        pDoc.getElementById('pipExp').textContent = fmtCompact(effectiveRate);
         pDoc.getElementById('pipPct').textContent = `${pct.toFixed(1)}%`;
 
         const pNet = pDoc.getElementById('pipNet');
@@ -1667,6 +2433,10 @@
     state.currentExp = null;
     state.currentPct = 0;
     state.expGained = 0;
+    state.expSamples = [];
+    state.chartPointsMeta = [];
+    state.mapVisits = [];
+    state.activeVisitIdx = -1;
     state.recentCaptures = [];
     state.lastMeso = null;
     state.grossMesoGained = 0;
@@ -1680,12 +2450,16 @@
       state.slotLive[k].lastCount = null;
     }
     renderQuickslotCards();
+    renderPerMapTable();
+    drawExpChart();
     updateUI();
-    scanFrame();
+    scanFrame(true);
   }
 
   $('btnSaveSession').addEventListener('click', () => {
-    const mapName = prompt('Enter Map Name (e.g., Coolie Zombies, Wolf Spiders, Himes):', 'Grind Session');
+    const visitedMaps = [...new Set(state.mapVisits.map(v => v.map).filter(m => m && m !== 'Unknown Map'))];
+    const defaultLabel = visitedMaps.length ? visitedMaps.join(' → ') : (state.currentMap !== 'Unknown Map' ? state.currentMap : 'Grind Session');
+    const mapName = prompt('Enter Map Name(s) for Saved Log:', defaultLabel);
     if (!mapName) return;
 
     const grossMesos = state.grossMesoGained + state.manualMesoOffset;
@@ -1711,7 +2485,7 @@
   });
 
   $('btnResetNoSave').addEventListener('click', () => {
-    if (confirm('Reset current session timers, EXP, mesos, and potion usage without saving?')) {
+    if (confirm('Reset current session timers, EXP, map history, mesos, and potion usage without saving?')) {
       resetCurrentSession();
     }
   });
@@ -1780,8 +2554,8 @@
         }
         if (data.customNorm) {
           state.customNorm = data.customNorm;
-          localStorage.setItem('ms_customNorm_v2', JSON.stringify(state.customNorm));
-          updateSetupHighlights();
+          localStorage.setItem('ms_customNorm_v4', JSON.stringify(state.customNorm));
+          updateModeBadges();
         }
         if (Array.isArray(data.logs)) {
           state.logs = data.logs;
@@ -1811,6 +2585,8 @@
     a.download = `maple-grind-logs-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
   });
+
+  drawExpChart();
 })();
 </script>
 </body>
