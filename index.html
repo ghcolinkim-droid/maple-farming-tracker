@@ -453,24 +453,23 @@
     }
   }
 
-  // --- Preset MapleStory Classic Potions (Includes Lemon & Meat) ---
+  // --- Preset MapleStory Classic Potions (Classic NPC Prices) ---
   const POTION_PRESETS = [
     { id: 'none',       name: 'Not tracked',        cost: 0 },
-    { id: 'lemon',      name: 'Lemon (50% MP)',     cost: 3100 },
-    { id: 'meat',       name: 'Meat (1000 HP)',     cost: 1000 },
-    { id: 'ginger_ale', name: 'Ginger Ale (HP+MP)', cost: 3800 },
-    { id: 'unagi',      name: 'Unagi (1000 HP)',    cost: 1100 },
-    { id: 'white_pot',  name: 'White Potion',       cost: 320 },
-    { id: 'orange_pot', name: 'Orange Potion',      cost: 160 },
+    { id: 'lemon',      name: 'Lemon',              cost: 150 },
+    { id: 'meat',       name: 'Meat',               cost: 160 },
     { id: 'red_pot',    name: 'Red Potion',         cost: 50 },
+    { id: 'orange_pot', name: 'Orange Potion',      cost: 160 },
+    { id: 'white_pot',  name: 'White Potion',       cost: 320 },
+    { id: 'blue_pot',   name: 'Blue Potion',        cost: 200 },
     { id: 'mana_elix',  name: 'Mana Elixir',        cost: 600 },
     { id: 'pure_water', name: 'Pure Water',         cost: 850 },
-    { id: 'blue_pot',   name: 'Blue Potion',        cost: 200 },
-    { id: 'sorc_elix',  name: 'Wizard/Sorc Elixir', cost: 500 },
+    { id: 'unagi',      name: 'Unagi',              cost: 1100 },
+    { id: 'ginger_ale', name: 'Ginger Ale',         cost: 3800 },
     { id: 'custom',     name: 'Custom Price...',    cost: 1000 }
   ];
 
-  // --- MapleStory Classic 5x7 Bitmap Font Templates ---
+  // --- MapleStory Classic 5x7 Bitmap Font Templates (EXP & Meso Text) ---
   const GLYPH_TEMPLATES = {
     '0': ['01110','10001','10011','10101','11001','10001','01110'],
     '1': ['00100','01100','00100','00100','00100','00100','01110'],
@@ -489,6 +488,131 @@
     ']': ['11','01','01','01','01','01','11']
   };
 
+  // --- MapleStory Classic Quickslot Outlined Stack Count Templates (7x10 Black Outline on White Slot) ---
+  // Matches exact 1px black drop-shadow/outline digits shown in quickslot bottom-left (e.g., 71, 769, 159, 44)
+  const QS_OUTLINE_TEMPLATES = {
+    '0': [
+      '0111110',
+      '1100011',
+      '1011101',
+      '1010101',
+      '1010101',
+      '1010101',
+      '1010101',
+      '1011101',
+      '1100011',
+      '0111110'
+    ],
+    '1': [
+      '0011100',
+      '0110100',
+      '1100100',
+      '1010100',
+      '1110100',
+      '0010100',
+      '0010100',
+      '0010100',
+      '0010100',
+      '0011100'
+    ],
+    '2': [
+      '0111110',
+      '1100011',
+      '1011101',
+      '1110101',
+      '0011011',
+      '0110110',
+      '1101100',
+      '1011111',
+      '1000001',
+      '1111111'
+    ],
+    '3': [
+      '0111110',
+      '1100011',
+      '1011101',
+      '1110101',
+      '0011011',
+      '0011011',
+      '1110101',
+      '1011101',
+      '1100011',
+      '0111110'
+    ],
+    '4': [
+      '0001110',
+      '0011010',
+      '0110010',
+      '1101010',
+      '1011010',
+      '1000001',
+      '1111011',
+      '0001010',
+      '0001010',
+      '0001110'
+    ],
+    '5': [
+      '1111111',
+      '1000001',
+      '1011111',
+      '1000010',
+      '1111101',
+      '0000101',
+      '1110101',
+      '1011101',
+      '1100011',
+      '0111110'
+    ],
+    '6': [
+      '0111110',
+      '1100011',
+      '1011101',
+      '1011110',
+      '1000010',
+      '1011101',
+      '1010101',
+      '1011101',
+      '1100011',
+      '0111110'
+    ],
+    '7': [
+      '1111111',
+      '1000001',
+      '1011101',
+      '1110110',
+      '0011010',
+      '0110100',
+      '0101100',
+      '0101000',
+      '0101000',
+      '0111000'
+    ],
+    '8': [
+      '0111110',
+      '1100011',
+      '1011101',
+      '1101011',
+      '0110110',
+      '1101011',
+      '1010101',
+      '1011101',
+      '1100011',
+      '0111110'
+    ],
+    '9': [
+      '0111110',
+      '1100011',
+      '1011101',
+      '1010101',
+      '1011101',
+      '1100001',
+      '0111101',
+      '1011101',
+      '1100011',
+      '0111110'
+    ]
+  };
+
   // --- App State ---
   const state = {
     mode: 'idle',
@@ -504,12 +628,11 @@
     grossMesoGained: 0,
     manualMesoOffset: 0,
 
-    // 4 (1x4 top row 1-4), 8 (4x2), or 12 (4x3)
     slotCount: safeLoad('ms_slotCount_v2', 4),
     slotConfig: safeLoad('ms_slotConfig', {}),
     slotLive: {},
 
-    offsets: safeLoad('ms_offsets_v2', {
+    offsets: safeLoad('ms_offsets_v3', {
       exp: { dx: 0, dy: 0 },
       qs:  { dx: 0, dy: 0 }
     }),
@@ -552,14 +675,14 @@
     btn.addEventListener('click', () => {
       const [target, axis, valStr] = btn.dataset.nudge.split(':');
       state.offsets[target][axis] += parseInt(valStr, 10);
-      localStorage.setItem('ms_offsets_v2', JSON.stringify(state.offsets));
+      localStorage.setItem('ms_offsets_v3', JSON.stringify(state.offsets));
       scanFrame();
     });
   });
 
   $('btnResetHudOffset').addEventListener('click', () => {
     state.offsets = { exp: { dx: 0, dy: 0 }, qs: { dx: 0, dy: 0 } };
-    localStorage.setItem('ms_offsets_v2', JSON.stringify(state.offsets));
+    localStorage.setItem('ms_offsets_v3', JSON.stringify(state.offsets));
     scanFrame();
   });
 
@@ -653,7 +776,108 @@
   }
   renderQuickslotCards();
 
-  // --- Bitmap Font Reader ---
+  // --- Specialized Quickslot Stack Count Reader (Matches 1px Black Outline on White Slot) ---
+  function readQuickslotStackCount(slotImgData) {
+    const { width: w, height: h, data: d } = slotImgData;
+    // Scan bottom-left digit zone (x: 0..27, y: 19..31)
+    const x0 = 0, x1 = Math.min(w, 28);
+    const y0 = 19, y1 = Math.min(h, 32);
+    const rw = x1 - x0;
+    const rh = y1 - y0;
+
+    // 1. Threshold pure black outline pixels (r < 65 && g < 65 && b < 65)
+    const bin = new Uint8Array(rw * rh);
+    for (let y = 0; y < rh; y++) {
+      for (let x = 0; x < rw; x++) {
+        const idx = ((y0 + y) * w + (x0 + x)) * 4;
+        const r = d[idx], g = d[idx + 1], b = d[idx + 2];
+        bin[y * rw + x] = (r < 65 && g < 65 && b < 65) ? 1 : 0;
+      }
+    }
+
+    // 2. Find vertical span of the outlined digits (must be 8-11px tall)
+    let topY = -1, botY = -1;
+    for (let y = 0; y < rh; y++) {
+      let rowInk = 0;
+      for (let x = 0; x < rw; x++) rowInk += bin[y * rw + x];
+      if (rowInk >= 2) {
+        if (topY === -1) topY = y;
+        botY = y;
+      }
+    }
+    if (topY === -1 || (botY - topY + 1) < 7) return '';
+
+    // 3. Segment contiguous digit blobs horizontally (with 1px shared outline splitting)
+    const blobs = [];
+    let inBlob = false, startX = 0;
+    for (let x = 0; x <= rw; x++) {
+      let colInk = 0;
+      if (x < rw) {
+        for (let y = topY; y <= botY; y++) colInk += bin[y * rw + x];
+      }
+      if (colInk > 0 && !inBlob) {
+        inBlob = true;
+        startX = x;
+      } else if (colInk === 0 && inBlob) {
+        inBlob = false;
+        const bw = x - startX;
+        if (bw >= 3) {
+          // If 2 or 3 digits touch along their 1px black border (e.g. 12-22px wide), split evenly
+          const numDigits = bw >= 17 ? 3 : bw >= 11 ? 2 : 1;
+          const step = bw / numDigits;
+          for (let k = 0; k < numDigits; k++) {
+            blobs.push({
+              x0: Math.round(startX + k * step),
+              x1: Math.round(startX + (k + 1) * step) - 1,
+              y0: topY,
+              y1: botY
+            });
+          }
+        }
+      }
+    }
+
+    // 4. Match each segmented digit against QS_OUTLINE_TEMPLATES
+    let digits = '';
+    for (const b of blobs) {
+      const cw = b.x1 - b.x0 + 1;
+      const ch = b.y1 - b.y0 + 1;
+      if (cw < 3 || ch < 7) continue;
+
+      let bestDigit = '';
+      let bestScore = -1;
+
+      for (const [digitChar, tmpl] of Object.entries(QS_OUTLINE_TEMPLATES)) {
+        const th = tmpl.length;
+        const tw = tmpl[0].length;
+        let matches = 0;
+        const total = th * tw;
+
+        for (let ty = 0; ty < th; ty++) {
+          const sy = b.y0 + Math.min(ch - 1, Math.floor((ty / th) * ch));
+          for (let tx = 0; tx < tw; tx++) {
+            const sx = b.x0 + Math.min(cw - 1, Math.floor((tx / tw) * cw));
+            const actual = bin[sy * rw + sx];
+            const expected = tmpl[ty][tx] === '1' ? 1 : 0;
+            if (actual === expected) matches++;
+          }
+        }
+        const score = matches / total;
+        if (score > bestScore) {
+          bestScore = score;
+          bestDigit = digitChar;
+        }
+      }
+
+      if (bestScore >= 0.62) {
+        digits += bestDigit;
+      }
+    }
+
+    return digits;
+  }
+
+  // --- Bitmap Font Reader (EXP & Meso Text) ---
   function readMapleBitmapText(imgData, mode = 'white') {
     const { width: w, height: h, data: d } = imgData;
     const bin = new Uint8Array(w * h);
@@ -663,14 +887,12 @@
         const idx = (y * w + x) * 4;
         const r = d[idx], g = d[idx + 1], b = d[idx + 2];
         if (mode === 'white') {
-          // MapleStory HUD / Quickslot stack digits are bright white (#FFFFFF) with 1px black outline
           const minC = Math.min(r, g, b);
           const maxC = Math.max(r, g, b);
           bin[y * w + x] = (minC > 175 && (maxC - minC) < 45) ? 1 : 0;
         } else {
-          // Dark digits on white/light-grey Meso box (includes anti-aliased comma/digits)
           const lum = r * 0.299 + g * 0.587 + b * 0.114;
-          bin[y * w + x] = lum < 145 ? 1 : 0;
+          bin[y * w + x] = lum < 155 ? 1 : 0;
         }
       }
     }
@@ -733,9 +955,8 @@
       const cw = box.x1 - box.x0 + 1;
       const ch = box.y1 - box.y0 + 1;
 
-      // Ignore 1-2px comma/period dots so they don't break digit runs
       if (cw <= 2 && ch <= 4) {
-        result += ',';
+        result += '.';
         continue;
       }
 
@@ -818,32 +1039,27 @@
       }
     }
 
-    const defaultExpX = isWide ? (gameLeft + 412) : (gameLeft + Math.floor(clientW * 0.445));
+    const defaultExpX = isWide ? (gameLeft + 434) : (gameLeft + Math.floor(clientW * 0.445) + 22);
     const defaultExpY = isWide ? (gameBottom - 18) : (gameBottom - 19);
 
     const expRect = {
-      x: Math.max(0, (yellowPixels > 6 ? expBarMinX - 4 : defaultExpX) + state.offsets.exp.dx),
+      x: Math.max(0, (yellowPixels > 6 ? expBarMinX + 22 : defaultExpX) + state.offsets.exp.dx),
       y: Math.max(0, (yellowPixels > 6 ? expBarMinY - 2 : defaultExpY) + state.offsets.exp.dy),
-      w: isWide ? 165 : 175,
+      w: isWide ? 145 : 155,
       h: 15
     };
 
-    // Quickslot Grid:
-    // - 4 slots: 1x4 top row (1, 2, 3, 4) sitting at y = gameBottom - 1 - (3 * 34)
-    // - 8 slots: 4x2 bottom rows sitting at y = gameBottom - 1 - (2 * 34)
-    // - 12 slots: 4x3 full block sitting at y = gameBottom - 1 - (3 * 34)
     const cols = 4;
     const rows = state.slotCount === 4 ? 1 : state.slotCount === 8 ? 2 : 3;
     const slotW = 35;
-    const slotH = 34;
+    const slotH = 35;
     const gridW = cols * slotW;
     const gridH = rows * slotH;
 
     const defaultQsX = isWide
-      ? (gameLeft + clientW - 418)
+      ? (gameLeft + clientW - 421)
       : (gameLeft + clientW - 146);
 
-    // When 4-slot top row (1-4) is selected, anchor to the TOP row of the 3-row quickslot block
     const defaultQsY = state.slotCount === 4
       ? (gameBottom - 1) - (3 * slotH)
       : (gameBottom - 1) - gridH;
@@ -862,36 +1078,34 @@
     return { clientW, gameBottom, expRect, qsRect };
   }
 
-  // --- Classic Light-Grey "ITEM INVENTORY" & Full-Width White Meso Box Detector ---
+  // --- Classic Light-Grey "ITEM INVENTORY" & Meso Box Detector ---
   function detectInventoryWindow(w, h, data) {
-    for (let y = 160; y < h - 50; y += 2) {
-      for (let x = 40; x < w - 125; x += 2) {
+    for (let y = 140; y < h - 45; y += 2) {
+      for (let x = 35; x < w - 125; x += 2) {
         const i = (y * w + x) * 4;
         const r = data[i], g = data[i + 1], b = data[i + 2];
 
-        // Find the left-most pure white pixel (#FFFFFF) of the Meso box
-        if (r > 245 && g > 245 && b > 245) {
-          // Ensure pixel immediately to its left is NOT pure white (so x is the true left edge of the white box)
-          const li = (y * w + (x - 1)) * 4;
-          if (data[li] > 240 && data[li + 1] > 240 && data[li + 2] > 240) continue;
+        if (r >= 232 && g >= 232 && b >= 232 && Math.abs(r - b) < 12) {
+          const li = (y * w + (x - 2)) * 4;
+          if (data[li] >= 225 && data[li + 1] >= 225 && data[li + 2] >= 225) continue;
 
-          // Verify ~105px wide white box containing dark digits
-          let whiteRun = 0;
+          let brightRun = 0;
           let darkTextPixels = 0;
-          for (let dx = 0; dx < 105; dx++) {
+          for (let dx = 0; dx < 98; dx++) {
             const wi = (y * w + x + dx) * 4;
             const wr = data[wi], wg = data[wi + 1], wb = data[wi + 2];
-            if (wr > 238 && wg > 238 && wb > 238) whiteRun++;
-            else if (wr < 145 && wg < 145 && wb < 145) darkTextPixels++;
+            if (wr >= 228 && wg >= 228 && wb >= 228) brightRun++;
+            else if (wr < 160 && wg < 160 && wb < 160) darkTextPixels++;
           }
 
-          if (whiteRun >= 75 && darkTextPixels >= 2) {
-            // Verify gold coin / MESO badge ~35px to the left
+          if (brightRun >= 68 && darkTextPixels >= 2) {
             let goldPixels = 0;
-            for (let gx = x - 44; gx < x - 24; gx++) {
-              if (gx < 0) continue;
-              const gi = (y * w + gx) * 4;
-              if (data[gi] > 185 && data[gi + 1] > 135 && data[gi + 2] < 95) goldPixels++;
+            for (let gy = y - 2; gy <= y + 2; gy++) {
+              for (let gx = x - 36; gx <= x - 6; gx++) {
+                if (gx < 0 || gy < 0) continue;
+                const gi = (gy * w + gx) * 4;
+                if (data[gi] > 175 && data[gi + 1] > 125 && data[gi + 2] < 100) goldPixels++;
+              }
             }
 
             if (goldPixels >= 2) {
@@ -900,11 +1114,10 @@
                 winY: Math.max(0, y - 248),
                 winW: 172,
                 winH: 290,
-                // Full 114px width of the white meso box so right-aligned digits ("393,051") are never clipped
                 mesoRect: {
                   x: x,
                   y: y - 5,
-                  w: 114,
+                  w: 112,
                   h: 15
                 }
               };
@@ -978,9 +1191,10 @@
     const expData = wCtx.getImageData(hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h);
     const rawExpStr = readMapleBitmapText(expData, 'white');
 
-    const expMatch = rawExpStr.match(/([\d,]+)\s*[\[\(]?\s*(\d{1,2}\.\d{1,2})%?/);
+    const cleanExpStr = rawExpStr.replace(/^[^0-9]+/, '');
+    const expMatch = cleanExpStr.match(/([\d,\.]+)\s*[\[\(]?\s*(\d{1,2}\.\d{1,2})%?/);
     if (expMatch) {
-      const parsedExp = parseInt(expMatch[1].replace(/,/g, ''), 10);
+      const parsedExp = parseInt(expMatch[1].replace(/[^\d]/g, ''), 10);
       const parsedPct = parseFloat(expMatch[2]);
       $('readExp').textContent = `${fmtNum(parsedExp)} [${parsedPct.toFixed(2)}%]`;
 
@@ -1036,7 +1250,7 @@
       }
     }
 
-    // Read Quickslots (4, 8, or 12 slots)
+    // Read Quickslots (4, 8, or 12 slots) using dedicated 1px black-outline stack count reader
     for (let i = 0; i < state.slotCount; i++) {
       const col = i % hud.qsRect.cols;
       const row = Math.floor(i / hud.qsRect.cols);
@@ -1048,9 +1262,8 @@
         slotCanvas.getContext('2d').drawImage(workCanvas, sx, sy, 32, 32, 0, 0, 32, 32);
       }
 
-      // Expanded bottom-left digit box (28x12px) to cleanly capture 1-to-4 digit stack numbers
-      const numData = wCtx.getImageData(sx + 1, sy + 19, 28, 12);
-      const rawCount = readMapleBitmapText(numData, 'white').replace(/[^\d]/g, '');
+      const slotData = wCtx.getImageData(sx, sy, 32, 32);
+      const rawCount = readQuickslotStackCount(slotData);
 
       if (!state.slotLive[i]) {
         state.slotLive[i] = { count: null, lastCount: null, used: 0 };
@@ -1389,7 +1602,7 @@
         }
         if (data.offsets) {
           state.offsets = data.offsets;
-          localStorage.setItem('ms_offsets_v2', JSON.stringify(state.offsets));
+          localStorage.setItem('ms_offsets_v3', JSON.stringify(state.offsets));
         }
         if (Array.isArray(data.logs)) {
           state.logs = data.logs;
