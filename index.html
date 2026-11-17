@@ -285,7 +285,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="tab-live">Screen Calibration & OCR</button>
     <button class="tab-btn" data-tab="tab-pots">Potions & Manual Adjustments</button>
-    <button class="tab-btn" data-tab="tab-logs">Saved Grind Logs</button>
+    <button class="tab-btn" data-tab="tab-logs">Saved Grind Logs & Backup</button>
   </div>
 
   <!-- Tab 1: Screen Capture & Crop Boxes -->
@@ -396,12 +396,17 @@
     </div>
   </div>
 
-  <!-- Tab 3: Saved Session Logs -->
+  <!-- Tab 3: Saved Session Logs & Backup -->
   <div id="tab-logs" class="tab-panel">
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <h2>Saved Grind Sessions</h2>
-        <button id="btnExportCsv">⬇ Export CSV</button>
+      <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+        <h2>Saved Grind Sessions & Settings Backup</h2>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <button id="btnExportJson">📤 Backup JSON</button>
+          <button id="btnImportJson">📥 Restore JSON</button>
+          <input type="file" id="fileImportJson" accept=".json" style="display:none" />
+          <button id="btnExportCsv">⬇ Export CSV</button>
+        </div>
       </div>
       <table>
         <thead>
@@ -481,9 +486,15 @@
   });
 
   // --- Load Saved Potion Settings ---
+  function loadPotionInputs() {
+    ['hpName', 'hpCost', 'mpName', 'mpCost'].forEach(key => {
+      const saved = localStorage.getItem('ms_' + key);
+      if (saved !== null) $(key).value = saved;
+    });
+  }
+  loadPotionInputs();
+
   ['hpName', 'hpCost', 'mpName', 'mpCost'].forEach(key => {
-    const saved = localStorage.getItem('ms_' + key);
-    if (saved !== null) $(key).value = saved;
     $(key).addEventListener('input', () => {
       localStorage.setItem('ms_' + key, $(key).value);
       updateUI();
@@ -587,7 +598,6 @@
           height: 158
         });
       } else {
-        // Fallback for browsers without Document PiP API
         pipWindow = window.open('', 'MapleMiniHUD', 'width=330,height=158,menubar=no,toolbar=no,location=no,status=no');
       }
 
@@ -665,7 +675,7 @@
     }
   });
 
-  // --- Background Web Worker Timer (Prevents Browser Tab Throttling) ---
+  // --- Background Web Worker Timer ---
   function startBackgroundTimer() {
     if (timerWorker) return;
     const blob = new Blob([`
@@ -891,7 +901,7 @@
     }
   });
 
-  // --- Render Live KPIs (Main Window + Floating PiP HUD) ---
+  // --- Render Live KPIs ---
   function updateUI() {
     $('expClock').textContent = fmtTime(state.expSeconds);
     $('mesoClock').textContent = fmtTime(state.mesoSeconds);
@@ -930,7 +940,6 @@
     $('kpiGrossMeso').textContent = `+${fmtNum(state.grossMesoGained)}`;
     $('kpiPotBurn').textContent = `Pot Burn: -${fmtNum(potBurn)} (${state.pot1Used + state.pot2Used} pots)`;
 
-    // Sync Floating Mini HUD if open
     if (pipWindow && !pipWindow.closed) {
       const pDoc = pipWindow.document;
       const pStatus = pDoc.getElementById('pipStatus');
@@ -949,7 +958,7 @@
     }
   }
 
-  // --- Save Session & CSV Export ---
+  // --- Save Session, JSON Backup/Restore & CSV Export ---
   $('btnSaveSession').addEventListener('click', () => {
     const mapName = prompt('Enter Map Name (e.g., Coolie Zombies, Wolf Spiders, Himes):', 'Grind Session');
     if (!mapName) return;
@@ -1004,6 +1013,62 @@
   }
   renderLogs();
 
+  // JSON Backup
+  $('btnExportJson').addEventListener('click', () => {
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      rois: state.rois,
+      potions: {
+        hpName: $('hpName').value,
+        hpCost: $('hpCost').value,
+        mpName: $('mpName').value,
+        mpCost: $('mpCost').value
+      },
+      logs: state.logs
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `maple-tracker-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  });
+
+  // JSON Restore
+  $('btnImportJson').addEventListener('click', () => $('fileImportJson').click());
+  $('fileImportJson').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (data.rois) {
+          state.rois = data.rois;
+          localStorage.setItem('ms_rois', JSON.stringify(state.rois));
+          renderRoiBoxes();
+        }
+        if (data.potions) {
+          for (const [k, v] of Object.entries(data.potions)) {
+            localStorage.setItem('ms_' + k, v);
+          }
+          loadPotionInputs();
+        }
+        if (Array.isArray(data.logs)) {
+          state.logs = data.logs;
+          localStorage.setItem('ms_logs', JSON.stringify(state.logs));
+          renderLogs();
+        }
+        updateUI();
+        alert('Backup restored successfully!');
+      } catch {
+        alert('Invalid JSON backup file.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+
+  // CSV Export
   $('btnExportCsv').addEventListener('click', () => {
     if (!state.logs.length) return;
     const header = 'Date,Map,Grind Duration,EXP/hr,Gross Mesos,Pot Burn,Net Profit/hr\n';
