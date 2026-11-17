@@ -27,7 +27,7 @@
       color: var(--text);
       line-height: 1.45;
       padding: 16px;
-      max-width: 1200px;
+      max-width: 1240px;
       margin: 0 auto;
     }
 
@@ -79,6 +79,7 @@
     button.amber { background: rgba(245, 158, 11, 0.15); border-color: var(--amber); color: var(--amber); }
     button.red { background: rgba(239, 68, 68, 0.15); border-color: var(--red); color: var(--red); }
     button.purple { background: rgba(168, 85, 247, 0.15); border-color: var(--purple); color: #d8b4fe; }
+    button.sm { padding: 4px 9px; font-size: 0.78rem; }
 
     /* Hero KPI Strip */
     .kpi-grid {
@@ -138,10 +139,10 @@
     /* Capture & Calibration Area */
     .workspace {
       display: grid;
-      grid-template-columns: 1.4fr 1fr;
+      grid-template-columns: 1.45fr 1fr;
       gap: 14px;
     }
-    @media (max-width: 860px) { .workspace { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { .workspace { grid-template-columns: 1fr; } }
 
     .card {
       background: var(--panel);
@@ -149,38 +150,59 @@
       border-radius: 10px;
       padding: 14px;
     }
-    .card h2 { font-size: 0.92rem; margin-bottom: 10px; color: var(--text); }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .card h2 { font-size: 0.92rem; color: var(--text); }
 
-    .video-stage {
-      position: relative;
+    /* Scrollable Zoom Viewport */
+    .video-viewport {
       width: 100%;
+      height: 390px;
       background: #08090d;
       border: 1px solid var(--border);
       border-radius: 8px;
-      overflow: hidden;
-      aspect-ratio: 16 / 9;
+      overflow: auto;
+      position: relative;
+    }
+    .video-stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
       user-select: none;
+      cursor: crosshair;
+      transform-origin: top left;
+    }
+    .video-stage.zoomed {
+      width: 240%;
+      height: 240%;
     }
     video {
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: fill;
       display: block;
     }
     .roi-box {
       position: absolute;
       border: 2px solid;
       pointer-events: none;
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
-      padding: 1px 4px;
-      border-radius: 3px;
+      line-height: 1;
+      padding: 1px 3px;
+      border-radius: 2px;
+      white-space: nowrap;
     }
-    .roi-exp { border-color: var(--accent); background: rgba(79, 140, 255, 0.18); color: #fff; }
-    .roi-meso { border-color: var(--amber); background: rgba(245, 158, 11, 0.18); color: #fff; }
-    .roi-pot1 { border-color: var(--red); background: rgba(239, 68, 68, 0.18); color: #fff; }
-    .roi-pot2 { border-color: var(--purple); background: rgba(168, 85, 247, 0.18); color: #fff; }
-    .roi-drag { border: 2px dashed #fff; background: rgba(255,255,255,0.15); position: absolute; pointer-events: none; }
+    .roi-exp { border-color: var(--accent); background: rgba(79, 140, 255, 0.22); color: #fff; }
+    .roi-meso { border-color: var(--amber); background: rgba(245, 158, 11, 0.22); color: #fff; }
+    .roi-pot1 { border-color: var(--red); background: rgba(239, 68, 68, 0.22); color: #fff; }
+    .roi-pot2 { border-color: var(--purple); background: rgba(168, 85, 247, 0.22); color: #fff; }
+    .roi-drag { border: 2px dashed #fff; background: rgba(255,255,255,0.2); position: absolute; pointer-events: none; }
 
     .crop-toolbar {
       display: flex;
@@ -189,7 +211,19 @@
       margin-top: 10px;
       align-items: center;
     }
-    .crop-toolbar span { font-size: 0.8rem; color: var(--muted); margin-right: 4px; }
+    .crop-toolbar span { font-size: 0.78rem; color: var(--muted); }
+
+    .nudge-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+      align-items: center;
+      font-size: 0.76rem;
+      color: var(--muted);
+    }
 
     /* OCR Preview & Potion Settings */
     .ocr-row {
@@ -204,14 +238,15 @@
       margin-bottom: 8px;
     }
     .ocr-row canvas {
-      height: 28px;
-      max-width: 150px;
-      background: #000;
+      height: 34px;
+      max-width: 190px;
+      background: #fff;
+      border: 1px solid var(--border);
       border-radius: 4px;
       image-rendering: pixelated;
     }
     .ocr-meta { font-size: 0.78rem; color: var(--muted); }
-    .ocr-read { font-weight: 700; color: var(--text); font-family: monospace; font-size: 0.9rem; }
+    .ocr-read { font-weight: 700; color: var(--text); font-family: monospace; font-size: 0.92rem; }
 
     .form-grid {
       display: grid;
@@ -292,30 +327,46 @@
   <div id="tab-live" class="tab-panel active">
     <div class="workspace">
       <div class="card">
-        <h2>2. Select Box Type & Drag Over Your Game Feed</h2>
-        <div class="video-stage" id="videoStage">
-          <video id="gameVideo" autoplay muted playsinline></video>
-          <div id="boxExp" class="roi-box roi-exp" style="display:none">EXP</div>
-          <div id="boxMeso" class="roi-box roi-meso" style="display:none">MESO</div>
-          <div id="boxPot1" class="roi-box roi-pot1" style="display:none">HP POT</div>
-          <div id="boxPot2" class="roi-box roi-pot2" style="display:none">MP POT</div>
-          <div id="dragRect" class="roi-drag" style="display:none"></div>
+        <div class="card-head">
+          <h2>2. Zoom In & Drag Tightly Around Digits Only</h2>
+          <button id="btnZoom" class="sm primary">🔍 Zoom 2.4x (Easy Crop)</button>
+        </div>
+        <div class="video-viewport" id="videoViewport">
+          <div class="video-stage" id="videoStage">
+            <video id="gameVideo" autoplay muted playsinline></video>
+            <div id="boxExp" class="roi-box roi-exp" style="display:none">EXP</div>
+            <div id="boxMeso" class="roi-box roi-meso" style="display:none">MESO</div>
+            <div id="boxPot1" class="roi-box roi-pot1" style="display:none">HP</div>
+            <div id="boxPot2" class="roi-box roi-pot2" style="display:none">MP</div>
+            <div id="dragRect" class="roi-drag" style="display:none"></div>
+          </div>
         </div>
         <div class="crop-toolbar">
-          <span>Draw Box:</span>
-          <button data-target="exp" class="target-btn primary">EXP Bar</button>
-          <button data-target="meso" class="target-btn">Inventory Meso</button>
-          <button data-target="pot1" class="target-btn">HP Pot Slot</button>
-          <button data-target="pot2" class="target-btn">MP Pot Slot</button>
-          <button id="btnClearBoxes" style="margin-left:auto">Reset Boxes</button>
+          <span>Active Box:</span>
+          <button data-target="exp" class="target-btn sm primary">EXP Bar</button>
+          <button data-target="meso" class="target-btn sm">Inventory Meso</button>
+          <button data-target="pot1" class="target-btn sm">HP Pot Count</button>
+          <button data-target="pot2" class="target-btn sm">MP Pot Count</button>
+          <button id="btnClearBoxes" class="sm" style="margin-left:auto">Reset All</button>
+        </div>
+        <div class="nudge-bar">
+          <span>Fine-Tune Active Box:</span>
+          <button class="sm" data-nudge="dx:-1">←</button>
+          <button class="sm" data-nudge="dx:1">→</button>
+          <button class="sm" data-nudge="dy:-1">↑</button>
+          <button class="sm" data-nudge="dy:1">↓</button>
+          <button class="sm" data-nudge="dw:1">+Width</button>
+          <button class="sm" data-nudge="dw:-1">-Width</button>
+          <button class="sm" data-nudge="dh:1">+Height</button>
+          <button class="sm" data-nudge="dh:-1">-Height</button>
         </div>
       </div>
 
       <div class="card">
-        <h2>Live Preprocessed OCR Reads (3x Upscaled)</h2>
+        <h2>Live Preprocessed OCR Reads (6x Upscaled)</h2>
         <div class="ocr-row">
           <div>
-            <div class="ocr-meta">EXP Read (Raw / Parsed)</div>
+            <div class="ocr-meta">EXP Digits (Exclude yellow "EXP" tag)</div>
             <div id="readExp" class="ocr-read">Waiting...</div>
           </div>
           <canvas id="cvsExp"></canvas>
@@ -323,7 +374,7 @@
 
         <div class="ocr-row">
           <div>
-            <div class="ocr-meta">Inventory Mesos</div>
+            <div class="ocr-meta">Inventory Mesos (Include full left side)</div>
             <div id="readMeso" class="ocr-read">Waiting...</div>
           </div>
           <canvas id="cvsMeso"></canvas>
@@ -331,7 +382,7 @@
 
         <div class="ocr-row">
           <div>
-            <div class="ocr-meta">HP Potion Count</div>
+            <div class="ocr-meta">HP Potion Count (Bottom-left number only)</div>
             <div id="readPot1" class="ocr-read">Waiting...</div>
           </div>
           <canvas id="cvsPot1"></canvas>
@@ -339,14 +390,14 @@
 
         <div class="ocr-row">
           <div>
-            <div class="ocr-meta">MP Potion Count</div>
+            <div class="ocr-meta">MP Potion Count (Bottom-left number only)</div>
             <div id="readPot2" class="ocr-read">Waiting...</div>
           </div>
           <canvas id="cvsPot2"></canvas>
         </div>
 
-        <p style="font-size:0.78rem; color:var(--muted); margin-top:8px;">
-          💡 <strong>Tip:</strong> Click <strong>📌 Float Mini HUD</strong> after capturing your game window to keep a tiny always-on-top overlay in the corner of your screen with quick Grind / NPC Sell buttons.
+        <p style="font-size:0.78rem; color:var(--muted); margin-top:8px; line-height:1.5;">
+          💡 <strong>1366×768 Tip:</strong> Click <strong>🔍 Zoom 2.4x</strong>, scroll to the bottom HUD, and draw boxes tightly around <em>just the white numbers</em> (don't include the yellow EXP label or the potion icon artwork).
         </p>
       </div>
     </div>
@@ -446,6 +497,7 @@
     pot2Used: 0,
 
     activeTarget: 'exp',
+    isZoomed: false,
     rois: JSON.parse(localStorage.getItem('ms_rois') || '{}'),
     logs: JSON.parse(localStorage.getItem('ms_logs') || '[]')
   };
@@ -459,6 +511,7 @@
   const $ = id => document.getElementById(id);
   const video = $('gameVideo');
   const stage = $('videoStage');
+  const viewport = $('videoViewport');
 
   const fmtNum = n => Math.round(n).toLocaleString('en-US');
   const fmtCompact = n => {
@@ -474,6 +527,17 @@
     const s = String(Math.floor(sec % 60)).padStart(2, '0');
     return `${h}:${m}:${s}`;
   };
+
+  // --- Zoom Toggle for Easy Cropping ---
+  $('btnZoom').addEventListener('click', () => {
+    state.isZoomed = !state.isZoomed;
+    stage.classList.toggle('zoomed', state.isZoomed);
+    $('btnZoom').textContent = state.isZoomed ? '🔍 Fit 1x (Full View)' : '🔍 Zoom 2.4x (Easy Crop)';
+    if (state.isZoomed) {
+      // Auto-scroll toward bottom HUD where EXP & quickslots live
+      viewport.scrollTop = viewport.scrollHeight;
+    }
+  });
 
   // --- Tabs ---
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -501,7 +565,7 @@
     });
   });
 
-  // --- ROI Box Drawing ---
+  // --- ROI Box Drawing & Nudging ---
   document.querySelectorAll('.target-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.target-btn').forEach(b => b.classList.remove('primary'));
@@ -528,6 +592,27 @@
   }
   renderRoiBoxes();
 
+  // Pixel-level nudge controls
+  document.querySelectorAll('[data-nudge]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const r = state.rois[state.activeTarget];
+      if (!r) return;
+      const vw = video.videoWidth || 1366;
+      const vh = video.videoHeight || 768;
+      const [prop, dirStr] = btn.dataset.nudge.split(':');
+      const dir = parseInt(dirStr, 10);
+
+      if (prop === 'dx') r.x = Math.max(0, Math.min(1 - r.w, r.x + dir / vw));
+      if (prop === 'dy') r.y = Math.max(0, Math.min(1 - r.h, r.y + dir / vh));
+      if (prop === 'dw') r.w = Math.max(2 / vw, Math.min(1 - r.x, r.w + dir / vw));
+      if (prop === 'dh') r.h = Math.max(2 / vh, Math.min(1 - r.y, r.h + dir / vh));
+
+      localStorage.setItem('ms_rois', JSON.stringify(state.rois));
+      renderRoiBoxes();
+      runOcrPass();
+    });
+  });
+
   $('btnClearBoxes').addEventListener('click', () => {
     state.rois = {};
     localStorage.removeItem('ms_rois');
@@ -536,6 +621,7 @@
 
   let dragStart = null;
   stage.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
     const rect = stage.getBoundingClientRect();
     dragStart = {
       x: (e.clientX - rect.left) / rect.width,
@@ -577,10 +663,11 @@
     dragStart = null;
     $('dragRect').style.display = 'none';
 
-    if (w > 0.01 && h > 0.01) {
+    if (w > 0.003 && h > 0.003) {
       state.rois[state.activeTarget] = { x, y, w, h };
       localStorage.setItem('ms_rois', JSON.stringify(state.rois));
       renderRoiBoxes();
+      runOcrPass();
     }
   });
 
@@ -700,12 +787,13 @@
     };
   }
 
-  // --- Initialize Tesseract OCR Worker ---
+  // --- Initialize Tesseract OCR Worker (Single-Line Mode PSM 7) ---
   async function initOcr() {
     if (ocrWorker) return;
     ocrWorker = await Tesseract.createWorker('eng');
     await ocrWorker.setParameters({
       tessedit_char_whitelist: '0123456789.,[]()% ',
+      tessedit_pageseg_mode: '7' // Single line of text (much more accurate for HUD numbers)
     });
   }
 
@@ -750,7 +838,7 @@
   $('btnNpc').addEventListener('click', () => setMode('npc'));
   $('btnPause').addEventListener('click', () => setMode('paused'));
 
-  // --- Image Preprocessing (3x Nearest-Neighbor + High-Contrast Grayscale) ---
+  // --- High-DPI Image Preprocessing (6x Nearest-Neighbor + White Padding) ---
   function extractPreprocessedCanvas(roi, targetCanvas) {
     const vw = video.videoWidth;
     const vh = video.videoHeight;
@@ -761,15 +849,25 @@
     const sw = Math.max(1, Math.floor(roi.w * vw));
     const sh = Math.max(1, Math.floor(roi.h * vh));
 
-    const scale = 3;
-    targetCanvas.width = sw * scale;
-    targetCanvas.height = sh * scale;
+    const scale = 6; // 6x upscale for 1366x768 tiny bitmap fonts
+    const pad = 16;  // White margin so Tesseract doesn't clip edge digits
+
+    targetCanvas.width = sw * scale + pad * 2;
+    targetCanvas.height = sh * scale + pad * 2;
 
     const ctx = targetCanvas.getContext('2d', { willReadFrequently: true });
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw * scale, sh * scale);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
 
-    const img = ctx.getImageData(0, 0, targetCanvas.width, targetCanvas.height);
+    // Draw scaled crop into temporary offscreen canvas to threshold cleanly
+    const tmp = document.createElement('canvas');
+    tmp.width = sw * scale;
+    tmp.height = sh * scale;
+    const tCtx = tmp.getContext('2d', { willReadFrequently: true });
+    tCtx.imageSmoothingEnabled = false;
+    tCtx.drawImage(video, sx, sy, sw, sh, 0, 0, tmp.width, tmp.height);
+
+    const img = tCtx.getImageData(0, 0, tmp.width, tmp.height);
     const d = img.data;
     let avgLum = 0;
     for (let i = 0; i < d.length; i += 4) {
@@ -781,10 +879,11 @@
     for (let i = 0; i < d.length; i += 4) {
       let lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
       if (darkBg) lum = 255 - lum;
-      const val = lum > 135 ? 255 : 0;
+      const val = lum > 130 ? 255 : 0;
       d[i] = d[i + 1] = d[i + 2] = val;
     }
-    ctx.putImageData(img, 0, 0);
+    tCtx.putImageData(img, 0, 0);
+    ctx.drawImage(tmp, pad, pad);
     return true;
   }
 
@@ -1013,7 +1112,6 @@
   }
   renderLogs();
 
-  // JSON Backup
   $('btnExportJson').addEventListener('click', () => {
     const backup = {
       exportedAt: new Date().toISOString(),
@@ -1033,7 +1131,6 @@
     a.click();
   });
 
-  // JSON Restore
   $('btnImportJson').addEventListener('click', () => $('fileImportJson').click());
   $('fileImportJson').addEventListener('change', e => {
     const file = e.target.files[0];
@@ -1068,7 +1165,6 @@
     e.target.value = '';
   });
 
-  // CSV Export
   $('btnExportCsv').addEventListener('click', () => {
     if (!state.logs.length) return;
     const header = 'Date,Map,Grind Duration,EXP/hr,Gross Mesos,Pot Burn,Net Profit/hr\n';
