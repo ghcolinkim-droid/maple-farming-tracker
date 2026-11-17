@@ -394,7 +394,7 @@
         </div>
 
         <p style="font-size:0.78rem; color:var(--muted); margin-top:8px; line-height:1.5;">
-          ⚡ Click <strong>Auto-Set 1366×768 HUD</strong> to snap the <strong>EXP Bar</strong>, <strong>HP Pot</strong>, and <strong>MP Pot</strong> boxes into place automatically—then only drag a box around <strong>Inventory Meso</strong> if you want live meso tracking!
+          ⚡ Click <strong>Auto-Set 1366×768 HUD</strong> to snap the <strong>EXP Bar</strong>, <strong>HP Pot</strong>, and <strong>MP Pot</strong> boxes directly onto the numbers—then use the <code>← → ↑ ↓</code> buttons if any box is 1–2 pixels off.
         </p>
       </div>
     </div>
@@ -527,11 +527,10 @@
 
   // --- 1-Click Auto-Preset for 1366x768 MapleStory Classic Windowed HUD ---
   $('btnPreset1366').addEventListener('click', () => {
-    // Calibrated to MapleStory 1366x768 windowed frame (including standard Windows titlebar)
-    state.rois.exp  = { x: 0.348, y: 0.935, w: 0.118, h: 0.024 };
-    // Quickslot Top Row Slot #2 (HP Pot) & Slot #3 (MP Pot) bottom-left stack digits
-    state.rois.pot1 = { x: 0.873, y: 0.873, w: 0.021, h: 0.020 };
-    state.rois.pot2 = { x: 0.899, y: 0.873, w: 0.021, h: 0.020 };
+    // Aligned directly to the EXP digits row (above the yellow bar) & Quickslot bottom-left stack digits
+    state.rois.exp  = { x: 0.348, y: 0.903, w: 0.118, h: 0.025 };
+    state.rois.pot1 = { x: 0.872, y: 0.868, w: 0.023, h: 0.022 };
+    state.rois.pot2 = { x: 0.898, y: 0.868, w: 0.023, h: 0.022 };
 
     localStorage.setItem('ms_rois', JSON.stringify(state.rois));
     renderRoiBoxes();
@@ -805,12 +804,19 @@
     });
   }
 
-  // --- Screen Capture ---
+  // --- Screen Capture (Defaults directly to Window tab & excludes browser surfaces) ---
   $('btnCapture').addEventListener('click', async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'never', frameRate: 15 },
-        audio: false
+        video: {
+          displaySurface: 'window',
+          cursor: 'never',
+          frameRate: 15
+        },
+        audio: false,
+        selfBrowserSurface: 'exclude',
+        monitorTypeSurfaces: 'exclude',
+        surfaceSwitching: 'exclude'
       });
       video.srcObject = stream;
       await initOcr();
@@ -847,8 +853,6 @@
   $('btnPause').addEventListener('click', () => setMode('paused'));
 
   // --- Specialized Image Preprocessing ---
-  // mode = 'whiteText' (for white EXP bar & white potion numbers over dark/colorful icons)
-  // mode = 'auto' (for dark meso numbers on light grey inventory box)
   function extractPreprocessedCanvas(roi, targetCanvas, filterMode = 'auto') {
     const vw = video.videoWidth;
     const vh = video.videoHeight;
@@ -880,10 +884,10 @@
     const d = img.data;
 
     if (filterMode === 'whiteText') {
-      // Extract ONLY bright white HUD font pixels (strips colorful potion art & dark outlines)
+      // Tuned for Windows compressed window-capture streams where white HUD digits sit around 165-255
       for (let i = 0; i < d.length; i += 4) {
-        const isWhiteDigit = d[i] > 205 && d[i + 1] > 205 && d[i + 2] > 205;
-        const val = isWhiteDigit ? 0 : 255; // Black text on pure white background
+        const isWhiteDigit = d[i] > 165 && d[i + 1] > 165 && d[i + 2] > 165;
+        const val = isWhiteDigit ? 0 : 255;
         d[i] = d[i + 1] = d[i + 2] = val;
       }
     } else {
@@ -913,297 +917,5 @@
     isScanning = true;
 
     try {
-      // 1. EXP Bar (White text filter)
-      if (state.rois.exp && extractPreprocessedCanvas(state.rois.exp, $('cvsExp'), 'whiteText')) {
-        const { data: { text } } = await ocrWorker.recognize($('cvsExp'));
-        const clean = text.trim();
-        const expMatch = clean.match(/([\d,]+)\s*[\[\(]?\s*(\d{1,2}\.\d{1,2})%?/);
-        if (expMatch) {
-          const parsedExp = parseInt(expMatch[1].replace(/,/g, ''), 10);
-          const parsedPct = parseFloat(expMatch[2]);
-          $('readExp').textContent = `${fmtNum(parsedExp)} (${parsedPct.toFixed(2)}%)`;
-
-          if (state.mode === 'grinding') {
-            if (state.startExp === null) {
-              state.startExp = parsedExp;
-              state.currentExp = parsedExp;
-              state.currentPct = parsedPct;
-            } else {
-              const delta = parsedExp - state.currentExp;
-              if (delta >= 0 && delta < 10_000_000) {
-                state.expGained += delta;
-                state.currentExp = parsedExp;
-                state.currentPct = parsedPct;
-              }
-            }
-          }
-        } else {
-          $('readExp').textContent = `Raw: "${clean || 'none'}"`;
-        }
-      }
-
-      // 2. Inventory Mesos
-      if (state.rois.meso && extractPreprocessedCanvas(state.rois.meso, $('cvsMeso'), 'auto')) {
-        const { data: { text } } = await ocrWorker.recognize($('cvsMeso'));
-        const digits = text.replace(/[^\d]/g, '');
-        if (digits.length > 0) {
-          const parsedMeso = parseInt(digits, 10);
-          $('readMeso').textContent = fmtNum(parsedMeso);
-
-          if (state.mode === 'grinding' || state.mode === 'npc') {
-            if (state.lastMeso === null) {
-              state.lastMeso = parsedMeso;
-            } else {
-              const diff = parsedMeso - state.lastMeso;
-              if (diff > 0 && diff < 50_000_000) {
-                state.grossMesoGained += diff;
-              }
-              state.lastMeso = parsedMeso;
-            }
-          }
-        } else {
-          $('readMeso').textContent = `Raw: "${text.trim() || 'none'}"`;
-        }
-      }
-
-      // 3. Potion Slots (Pure white stack digits filter)
-      if (state.rois.pot1 && extractPreprocessedCanvas(state.rois.pot1, $('cvsPot1'), 'whiteText')) {
-        const { data: { text } } = await ocrWorker.recognize($('cvsPot1'));
-        const digits = text.replace(/[^\d]/g, '');
-        if (digits.length > 0) {
-          const count = parseInt(digits, 10);
-          $('readPot1').textContent = count;
-          if (state.mode === 'grinding') {
-            if (state.lastPot1 !== null && count < state.lastPot1 && (state.lastPot1 - count) <= 25) {
-              state.pot1Used += (state.lastPot1 - count);
-            }
-            state.lastPot1 = count;
-          }
-        } else {
-          $('readPot1').textContent = `Raw: "${text.trim() || 'none'}"`;
-        }
-      }
-
-      if (state.rois.pot2 && extractPreprocessedCanvas(state.rois.pot2, $('cvsPot2'), 'whiteText')) {
-        const { data: { text } } = await ocrWorker.recognize($('cvsPot2'));
-        const digits = text.replace(/[^\d]/g, '');
-        if (digits.length > 0) {
-          const count = parseInt(digits, 10);
-          $('readPot2').textContent = count;
-          if (state.mode === 'grinding') {
-            if (state.lastPot2 !== null && count < state.lastPot2 && (state.lastPot2 - count) <= 25) {
-              state.pot2Used += (state.lastPot2 - count);
-            }
-            state.lastPot2 = count;
-          }
-        } else {
-          $('readPot2').textContent = `Raw: "${text.trim() || 'none'}"`;
-        }
-      }
-
-      updateUI();
-    } finally {
-      isScanning = false;
-    }
-  }
-
-  // --- Manual Adjustments ---
-  $('btnAddMeso').addEventListener('click', () => {
-    const val = parseInt($('manualMesoInput').value, 10);
-    if (!isNaN(val)) {
-      state.grossMesoGained += val;
-      $('manualMesoInput').value = '';
-      updateUI();
-    }
-  });
-
-  $('btnAddHp').addEventListener('click', () => {
-    const val = parseInt($('manualHpInput').value, 10);
-    if (!isNaN(val)) {
-      state.pot1Used += val;
-      $('manualHpInput').value = '';
-      updateUI();
-    }
-  });
-
-  // --- Render Live KPIs ---
-  function updateUI() {
-    $('expClock').textContent = fmtTime(state.expSeconds);
-    $('mesoClock').textContent = fmtTime(state.mesoSeconds);
-
-    const expHrs = state.expSeconds / 3600;
-    const expPerHr = expHrs > 0 ? state.expGained / expHrs : 0;
-    $('kpiExpHr').textContent = fmtNum(expPerHr);
-    $('kpiExpSub').textContent = `Session: +${fmtNum(state.expGained)} EXP`;
-    $('currentPct').textContent = `${state.currentPct.toFixed(2)}%`;
-    $('kpiCurrentExp').textContent = `Current: ${fmtNum(state.currentExp || 0)} EXP`;
-
-    let ttlStr = '--:--';
-    if (expPerHr > 0 && state.currentExp > 0 && state.currentPct > 0 && state.currentPct < 100) {
-      const totalLevelExp = state.currentExp / (state.currentPct / 100);
-      const remainingExp = Math.max(0, totalLevelExp - state.currentExp);
-      const minsLeft = Math.round((remainingExp / expPerHr) * 60);
-      const h = Math.floor(minsLeft / 60);
-      const m = minsLeft % 60;
-      ttlStr = `${h}h ${m}m`;
-    }
-    $('kpiTtl').textContent = ttlStr;
-
-    const hpCost = parseFloat($('hpCost').value) || 0;
-    const mpCost = parseFloat($('mpCost').value) || 0;
-    const potBurn = (state.pot1Used * hpCost) + (state.pot2Used * mpCost);
-    const netProfit = state.grossMesoGained - potBurn;
-
-    const mesoHrs = state.mesoSeconds / 3600;
-    const netPerHr = mesoHrs > 0 ? netProfit / mesoHrs : 0;
-
-    const netEl = $('kpiNetHr');
-    netEl.textContent = (netPerHr >= 0 ? '+' : '') + fmtNum(netPerHr);
-    netEl.className = 'kpi-value ' + (netPerHr >= 0 ? 'val-green' : 'val-red');
-
-    $('kpiNetSub').textContent = `Net Session: ${(netProfit >= 0 ? '+' : '') + fmtNum(netProfit)} mesos`;
-    $('kpiGrossMeso').textContent = `+${fmtNum(state.grossMesoGained)}`;
-    $('kpiPotBurn').textContent = `Pot Burn: -${fmtNum(potBurn)} (${state.pot1Used + state.pot2Used} pots)`;
-
-    if (pipWindow && !pipWindow.closed) {
-      const pDoc = pipWindow.document;
-      const pStatus = pDoc.getElementById('pipStatus');
-      if (pStatus) {
-        pStatus.className = 'pill ' + state.mode;
-        pStatus.textContent = state.mode === 'grinding' ? 'Grinding' : state.mode === 'npc' ? 'NPC Sell' : state.mode === 'paused' ? 'Paused' : 'Idle';
-        pDoc.getElementById('pipClock').textContent = fmtTime(state.mode === 'npc' ? state.mesoSeconds : state.expSeconds);
-        pDoc.getElementById('pipTtl').textContent = ttlStr;
-        pDoc.getElementById('pipExp').textContent = fmtCompact(expPerHr);
-        pDoc.getElementById('pipPct').textContent = `${state.currentPct.toFixed(1)}%`;
-
-        const pNet = pDoc.getElementById('pipNet');
-        pNet.textContent = (netPerHr >= 0 ? '+' : '') + fmtCompact(netPerHr);
-        pNet.className = 'val ' + (netPerHr >= 0 ? 'green' : 'red');
-      }
-    }
-  }
-
-  // --- Save Session, JSON Backup/Restore & CSV Export ---
-  $('btnSaveSession').addEventListener('click', () => {
-    const mapName = prompt('Enter Map Name (e.g., Coolie Zombies, Wolf Spiders, Himes):', 'Grind Session');
-    if (!mapName) return;
-
-    const hpCost = parseFloat($('hpCost').value) || 0;
-    const mpCost = parseFloat($('mpCost').value) || 0;
-    const potBurn = (state.pot1Used * hpCost) + (state.pot2Used * mpCost);
-    const netProfit = state.grossMesoGained - potBurn;
-
-    const expHrs = Math.max(1 / 3600, state.expSeconds / 3600);
-    const mesoHrs = Math.max(1 / 3600, state.mesoSeconds / 3600);
-
-    state.logs.unshift({
-      date: new Date().toLocaleDateString(),
-      map: mapName,
-      duration: fmtTime(state.expSeconds),
-      expHr: Math.round(state.expGained / expHrs),
-      grossMeso: state.grossMesoGained,
-      potBurn: Math.round(potBurn),
-      netHr: Math.round(netProfit / mesoHrs)
-    });
-
-    localStorage.setItem('ms_logs', JSON.stringify(state.logs));
-    renderLogs();
-
-    Object.assign(state, {
-      expSeconds: 0, mesoSeconds: 0,
-      startExp: null, expGained: 0,
-      lastMeso: null, grossMesoGained: 0,
-      lastPot1: null, pot1Used: 0,
-      lastPot2: null, pot2Used: 0
-    });
-    updateUI();
-  });
-
-  function renderLogs() {
-    const tbody = $('logTableBody');
-    if (!state.logs.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No saved sessions yet. Click "Save & Reset" after a grind!</td></tr>';
-      return;
-    }
-    tbody.innerHTML = state.logs.map(l => `
-      <tr>
-        <td><strong>${l.map}</strong><br><span style="font-size:0.75rem;color:var(--muted)">${l.date}</span></td>
-        <td>${l.duration}</td>
-        <td class="val-blue"><strong>${fmtNum(l.expHr)}</strong></td>
-        <td>+${fmtNum(l.grossMeso)}</td>
-        <td class="val-red">-${fmtNum(l.potBurn)}</td>
-        <td class="${l.netHr >= 0 ? 'val-green' : 'val-red'}"><strong>${fmtNum(l.netHr)}</strong></td>
-      </tr>
-    `).join('');
-  }
-  renderLogs();
-
-  $('btnExportJson').addEventListener('click', () => {
-    const backup = {
-      exportedAt: new Date().toISOString(),
-      rois: state.rois,
-      potions: {
-        hpName: $('hpName').value,
-        hpCost: $('hpCost').value,
-        mpName: $('mpName').value,
-        mpCost: $('mpCost').value
-      },
-      logs: state.logs
-    };
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `maple-tracker-backup-${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-  });
-
-  $('btnImportJson').addEventListener('click', () => $('fileImportJson').click());
-  $('fileImportJson').addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        if (data.rois) {
-          state.rois = data.rois;
-          localStorage.setItem('ms_rois', JSON.stringify(state.rois));
-          renderRoiBoxes();
-        }
-        if (data.potions) {
-          for (const [k, v] of Object.entries(data.potions)) {
-            localStorage.setItem('ms_' + k, v);
-          }
-          loadPotionInputs();
-        }
-        if (Array.isArray(data.logs)) {
-          state.logs = data.logs;
-          localStorage.setItem('ms_logs', JSON.stringify(state.logs));
-          renderLogs();
-        }
-        updateUI();
-        alert('Backup restored successfully!');
-      } catch {
-        alert('Invalid JSON backup file.');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  });
-
-  $('btnExportCsv').addEventListener('click', () => {
-    if (!state.logs.length) return;
-    const header = 'Date,Map,Grind Duration,EXP/hr,Gross Mesos,Pot Burn,Net Profit/hr\n';
-    const rows = state.logs.map(l =>
-      `"${l.date}","${l.map}","${l.duration}",${l.expHr},${l.grossMeso},${l.potBurn},${l.netHr}`
-    ).join('\n');
-    const blob = new Blob([header + rows], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `maple-grind-logs-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-  });
-})();
-</script>
-</body>
-</html>
+      // 1. EXP Bar
+      if (state.rois.exp && extractPreprocessedCanvas(
