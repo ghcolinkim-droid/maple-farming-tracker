@@ -1,4 +1,4 @@
-html_content = r'''<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -1471,7 +1471,6 @@ html_content = r'''<!DOCTYPE html>
     let contentBottom = h - 1;
     let contentTop = 0;
 
-    // Trim any pure-black WGC texture padding on the right or bottom
     const midY = Math.floor(h * 0.5);
     while (contentRight > 640) {
       const i = (midY * w + contentRight) * 4;
@@ -1498,7 +1497,6 @@ html_content = r'''<!DOCTYPE html>
       contentBottom--;
     }
 
-    // Detect Windows title bar height (bright white/light-grey strip at y = 0..34)
     let titleBarRows = 0;
     for (let y = 0; y < Math.min(42, contentBottom); y++) {
       let brightCount = 0;
@@ -1513,7 +1511,6 @@ html_content = r'''<!DOCTYPE html>
       contentTop = titleBarRows;
     }
 
-    // Account for ~7px Windows DWM bottom/left resize border if present
     const rawW = contentRight - contentLeft + 1;
     const rawH = contentBottom - contentTop + 1;
     if (rawW >= 1366 && rawW <= 1386) {
@@ -1641,7 +1638,6 @@ html_content = r'''<!DOCTYPE html>
       return r > 205 && g > 165 && b < 85 && (r - b) > 125;
     };
 
-    // 1. Find the Gold "LV." Badge across the lower status bar to lock the exact 800px dock origin
     const dockW = Math.min(clientW, 800);
     let dockLeft = gameLeft + Math.floor((clientW - dockW) / 2);
 
@@ -1663,7 +1659,6 @@ html_content = r'''<!DOCTYPE html>
       }
     }
     if (lvHits >= 10 && lvMaxX > 0) {
-      // Refine dockLeft directly from the LV. badge's left edge!
       dockLeft = Math.max(gameLeft, lvMinX - 8);
       const cy = Math.round(lvSumY / lvHits);
       levelRect = {
@@ -1675,7 +1670,7 @@ html_content = r'''<!DOCTYPE html>
     }
     const dockRight = dockLeft + dockW;
 
-    // 2. Find Gold "EXP" Badge on the 800px Dock (Located at dockLeft + 402..435, well left of CASH SHOP at dockLeft + 522)
+    // Fixed bottom-bar EXP Y-anchor: Exactly below the status bar progress bar (gameBottom - 16)
     let expRect;
     if (state.customNorm.exp) {
       const c = state.customNorm.exp;
@@ -1686,73 +1681,15 @@ html_content = r'''<!DOCTYPE html>
         h: Math.round(c.h * h)
       };
     } else {
-      const expSearchX0 = dockLeft + 390;
-      const expSearchX1 = dockLeft + 445;
-      const expSearchY0 = Math.max(0, gameBottom - 20);
-      const expSearchY1 = Math.max(0, gameBottom - 3);
-
-      let bestBadgeRightX = -1;
-      let bestBadgeCenterY = -1;
-      let bestClusterCount = 0;
-
-      for (let y = expSearchY0; y <= expSearchY1 - 6; y++) {
-        for (let x = expSearchX0; x <= expSearchX1 - 16; x++) {
-          let hits = 0;
-          let rightMost = x;
-          for (let dy = 0; dy < 7; dy++) {
-            for (let dx = 0; dx < 22; dx++) {
-              if (isGoldBadgePixel(x + dx, y + dy)) {
-                hits++;
-                if (x + dx > rightMost) rightMost = x + dx;
-              }
-            }
-          }
-          if (hits > bestClusterCount) {
-            bestClusterCount = hits;
-            bestBadgeRightX = rightMost;
-            bestBadgeCenterY = y + 3;
-          }
-        }
-      }
-
-      if (bestClusterCount >= 10 && bestBadgeRightX > 0) {
-        const scanX0 = bestBadgeRightX + 4;
-        const scanX1 = Math.min(dockLeft + 518, scanX0 + 108);
-        const scanY0 = Math.max(0, bestBadgeCenterY - 7);
-        const scanY1 = Math.min(gameBottom, bestBadgeCenterY + 7);
-
-        let minTX = scanX1, maxTX = scanX0, tHits = 0;
-        for (let ty = scanY0; ty <= scanY1; ty++) {
-          for (let tx = scanX0; tx <= scanX1; tx++) {
-            const i = (ty * w + tx) * 4;
-            const r = data[i], g = data[i + 1], b = data[i + 2];
-            if (r > 195 && g > 195 && b > 195 && Math.abs(r - b) < 35) {
-              tHits++;
-              if (tx < minTX) minTX = tx;
-              if (tx > maxTX) maxTX = tx;
-            }
-          }
-        }
-
-        const startX = tHits >= 8 ? Math.max(scanX0, minTX - 3) : scanX0 + 2;
-        const boxW = tHits >= 8 ? Math.min(108, Math.max(82, maxTX - startX + 6)) : 96;
-        expRect = {
-          x: Math.max(0, startX + state.offsets.exp.dx),
-          y: Math.max(0, bestBadgeCenterY - 6 + state.offsets.exp.dy),
-          w: boxW,
-          h: 13
-        };
-      } else {
-        expRect = {
-          x: Math.max(0, dockLeft + 426 + state.offsets.exp.dx),
-          y: Math.max(0, gameBottom - 16 + state.offsets.exp.dy),
-          w: 94,
-          h: 13
-        };
-      }
+      expRect = {
+        x: Math.max(0, dockLeft + 426 + state.offsets.exp.dx),
+        y: Math.max(0, gameBottom - 16 + state.offsets.exp.dy),
+        w: 94,
+        h: 13
+      };
     }
 
-    // 3. Auto-Detect Minimap Map Name Row (Below the Windows title bar & below the "MAP | WORLD" strip)
+    // Auto-Detect Minimap Map Name Row (Below Windows title bar, with dark-on-white safe Y bounds)
     let mapRect;
     if (state.customNorm.map) {
       const m = state.customNorm.map;
@@ -1765,8 +1702,8 @@ html_content = r'''<!DOCTYPE html>
     } else {
       const mX0 = gameLeft + 34;
       const mX1 = gameLeft + 225;
-      const mY0 = gameTop + 21; // Skips the "MAP | WORLD" tab bar inside the game canvas
-      const mY1 = gameTop + 52;
+      const mY0 = gameTop + 24;
+      const mY1 = gameTop + 48;
 
       let bestRowY = -1;
       let bestRowScore = 0;
@@ -1774,8 +1711,7 @@ html_content = r'''<!DOCTYPE html>
       let bestRowMaxX = mX0;
 
       for (let y = mY0; y <= mY1; y++) {
-        let whiteCount = 0;
-        let darkBgCount = 0;
+        let textPixels = 0;
         let rowMinX = mX1;
         let rowMaxX = mX0;
 
@@ -1783,20 +1719,18 @@ html_content = r'''<!DOCTYPE html>
           const i = (y * w + x) * 4;
           const r = data[i], g = data[i + 1], b = data[i + 2];
           const lum = r * 0.299 + g * 0.587 + b * 0.114;
-          if (r > 205 && g > 205 && b > 205 && Math.abs(r - b) < 35) {
-            whiteCount++;
+          // Detect dark text/outlines on the light blue background header
+          if (lum < 95 && Math.abs(r - g) < 25) {
+            textPixels++;
             if (x < rowMinX) rowMinX = x;
             if (x > rowMaxX) rowMaxX = x;
-          } else if (lum < 95 && b >= r) {
-            darkBgCount++;
           }
         }
 
         const span = rowMaxX - rowMinX;
-        if (whiteCount >= 8 && darkBgCount >= 45 && span >= 25 && span <= 185) {
-          const score = whiteCount * 2 + darkBgCount;
-          if (score > bestRowScore) {
-            bestRowScore = score;
+        if (textPixels >= 6 && span >= 25 && span <= 185) {
+          if (textPixels > bestRowScore) {
+            bestRowScore = textPixels;
             bestRowY = y;
             bestRowMinX = rowMinX;
             bestRowMaxX = rowMaxX;
@@ -1806,17 +1740,17 @@ html_content = r'''<!DOCTYPE html>
 
       if (bestRowY > 0) {
         mapRect = {
-          x: Math.max(gameLeft + 34, bestRowMinX - 5),
-          y: Math.max(gameTop + 20, bestRowY - 7),
-          w: Math.min(190, Math.max(115, bestRowMaxX - bestRowMinX + 16)),
-          h: 15
+          x: Math.max(gameLeft + 34, bestRowMinX - 6),
+          y: Math.max(gameTop + 20, bestRowY - 6),
+          w: Math.min(185, Math.max(110, bestRowMaxX - bestRowMinX + 16)),
+          h: 13
         };
       } else {
         mapRect = {
           x: gameLeft + 42,
-          y: gameTop + 24,
-          w: 175,
-          h: 15
+          y: gameTop + 26,
+          w: 170,
+          h: 13
         };
       }
     }
@@ -1825,7 +1759,7 @@ html_content = r'''<!DOCTYPE html>
     return { bounds, levelRect, expRect, mapRect, qsRect };
   }
 
-  // --- Inventory Meso Box Detector (Fixed-Width Box Right of MESO Icon + Light Inventory Panel Check) ---
+  // --- Gold-Coin Meso Anchor (Anchored directly right of gold coin icon in inventory footer) ---
   function detectInventoryWindow(w, h, data, bounds) {
     if (state.customNorm.meso) {
       const m = state.customNorm.meso;
@@ -1842,85 +1776,56 @@ html_content = r'''<!DOCTYPE html>
       };
     }
 
-    const isFieldBg = (px, py) => {
-      if (px < 0 || py < 0 || px >= w || py >= h) return false;
-      const i = (py * w + px) * 4;
-      const r = data[i], g = data[i + 1], b = data[i + 2];
-      return r >= 182 && g >= 182 && b >= 182 && Math.abs(r - b) < 16;
-    };
+    const scanX0 = bounds.gameLeft + 30;
+    const scanX1 = bounds.gameRight - 100;
+    const scanY0 = bounds.gameTop + 180;
+    const scanY1 = bounds.gameBottom - 35;
 
-    const scanX0 = bounds.gameLeft + 25;
-    const scanX1 = bounds.gameRight - 95;
-    const scanY0 = bounds.gameTop + 160;
-    const scanY1 = bounds.gameBottom - 45;
+    let bestCoinX = -1;
+    let bestCoinY = -1;
+    let maxGoldHits = 0;
 
-    for (let y = scanY0; y < scanY1; y += 2) {
-      for (let x = scanX0; x < scanX1; x += 2) {
-        if (!isFieldBg(x, y) || isFieldBg(x - 2, y)) continue;
-
-        let boxTop = y;
-        while (boxTop > y - 16 && isFieldBg(x + 2, boxTop - 1)) boxTop--;
-
-        let boxBottom = y;
-        while (boxBottom < y + 16 && isFieldBg(x + 2, boxBottom + 1)) boxBottom++;
-
-        const boxH = boxBottom - boxTop + 1;
-        if (boxH < 11 || boxH > 19) continue;
-
-        let boxLeft = x;
-        while (boxLeft > x - 10 && isFieldBg(boxLeft - 1, boxTop + 1)) boxLeft--;
-
-        // Check gold MESO coin/label immediately left of the box
-        let goldPixels = 0;
-        for (let gy = boxTop - 1; gy <= boxBottom + 1; gy++) {
-          for (let gx = boxLeft - 38; gx <= boxLeft - 3; gx++) {
-            if (gx < 0 || gy < 0) continue;
-            const gi = (gy * w + gx) * 4;
-            if (data[gi] > 175 && data[gi + 1] > 125 && data[gi + 2] < 95) goldPixels++;
-          }
-        }
-        if (goldPixels < 3) continue;
-
-        // Verify the light-grey Inventory Item Grid exists directly ABOVE the meso box
-        const gridX0 = Math.max(0, boxLeft - 42);
-        const gridX1 = Math.min(w - 1, boxLeft + 84);
-        const gridY0 = Math.max(0, boxTop - 185);
-        const gridY1 = Math.max(0, boxTop - 12);
-        let neutralLightHits = 0;
-        let sampled = 0;
-        for (let gy = gridY0; gy <= gridY1; gy += 4) {
-          for (let gx = gridX0; gx <= gridX1; gx += 4) {
-            sampled++;
-            const gi = (gy * w + gx) * 4;
-            const r = data[gi], g = data[gi + 1], b = data[gi + 2];
-            if (r > 180 && g > 180 && b > 180 && Math.max(r, g, b) - Math.min(r, g, b) < 22) {
-              neutralLightHits++;
+    for (let y = scanY0; y < scanY1; y++) {
+      for (let x = scanX0; x < scanX1; x++) {
+        let goldHits = 0;
+        for (let dy = 0; dy < 12; dy++) {
+          for (let dx = 0; dx < 12; dx++) {
+            const i = ((y + dy) * w + (x + dx)) * 4;
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            if (r > 195 && g > 155 && b < 70 && (r - b) > 120) {
+              goldHits++;
             }
           }
         }
-
-        if (sampled > 0 && (neutralLightHits / sampled) >= 0.42) {
-          // Use fixed 84px inner field width so right-aligned digits never truncate the box!
-          const boxW = Math.min(84, bounds.gameRight - boxLeft - 4);
-          return {
-            winX: Math.max(0, boxLeft - 48),
-            winY: Math.max(0, boxTop - 246),
-            winW: 172,
-            winH: 290,
-            mesoRect: {
-              x: boxLeft,
-              y: boxTop,
-              w: boxW,
-              h: boxH
-            }
-          };
+        if (goldHits > maxGoldHits && goldHits >= 18) {
+          maxGoldHits = goldHits;
+          bestCoinX = x;
+          bestCoinY = y;
         }
       }
     }
+
+    if (bestCoinX > 0) {
+      const boxX = bestCoinX + 18;
+      const boxY = bestCoinY - 1;
+      return {
+        winX: Math.max(0, bestCoinX - 48),
+        winY: Math.max(0, bestCoinY - 245),
+        winW: 172,
+        winH: 290,
+        mesoRect: {
+          x: boxX,
+          y: boxY,
+          w: 82,
+          h: 14
+        }
+      };
+    }
+
     return null;
   }
 
-  // --- Validated EXP String Parser (Cross-checks Integer EXP Against [XX.XX%]) ---
+  // --- Validated EXP String Parser ---
   function parseExpOcrText(rawExpStr, reqExp) {
     if (!rawExpStr) return { exp: null, pct: null, valid: false };
     const trimmed = rawExpStr.replace(/^[^\d]+/, '');
@@ -1943,7 +1848,6 @@ html_content = r'''<!DOCTYPE html>
 
     const expectedPct = Math.min(99.99, (parsedExp / reqExp) * 100);
     if (parsedPct !== null && !isNaN(parsedPct)) {
-      // Cross-validate EXP integer vs percentage bracket to block single-frame OCR misreads
       if (Math.abs(expectedPct - parsedPct) > 2.5) {
         return { exp: parsedExp, pct: parsedPct, valid: false };
       }
@@ -1999,24 +1903,20 @@ html_content = r'''<!DOCTYPE html>
     overlayCanvas.height = vh;
     oCtx.drawImage(workCanvas, 0, 0);
 
-    // 0. Level Box Overlay (Cyan)
     if (hud.levelRect) {
       oCtx.strokeStyle = '#06b6d4';
       oCtx.lineWidth = 2;
       oCtx.strokeRect(hud.levelRect.x, hud.levelRect.y, hud.levelRect.w, hud.levelRect.h);
     }
 
-    // 1. EXP Box Overlay (Blue)
     oCtx.strokeStyle = '#4f8cff';
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h);
 
-    // 2. Map Name Box Overlay (Purple)
     oCtx.strokeStyle = '#a855f7';
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.mapRect.x, hud.mapRect.y, hud.mapRect.w, hud.mapRect.h);
 
-    // 3. Quickslot Outer Grid + Individual 32x32 Slot Thumbnails (Green)
     oCtx.strokeStyle = '#22c55e';
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.qsRect.x, hud.qsRect.y, hud.qsRect.w, hud.qsRect.h);
@@ -2035,7 +1935,6 @@ html_content = r'''<!DOCTYPE html>
       }
     }
 
-    // 4. Inventory Meso Overlay (Amber)
     if (inv) {
       oCtx.strokeStyle = '#f59e0b';
       oCtx.lineWidth = 2;
@@ -2088,7 +1987,6 @@ html_content = r'''<!DOCTYPE html>
     scanCycle++;
 
     try {
-      // A0. Auto-Read Character Level on initial capture or every 15th cycle
       if (hud.levelRect && ocrWorker && (forceAllRead || scanCycle === 1 || scanCycle % 15 === 0)) {
         const rawLvStr = await readLinePixelCrisp(
           workCanvas,
@@ -2105,12 +2003,12 @@ html_content = r'''<!DOCTYPE html>
         }
       }
 
-      // A. Read Map Name
+      // Read Map Name using 'dark-on-white' binarization for bright minimap headers
       if (mapOcrWorker && (forceAllRead || scanCycle === 1 || scanCycle % 3 === 0)) {
         const rawMapStr = await readLinePixelCrisp(
           workCanvas,
           hud.mapRect.x, hud.mapRect.y, hud.mapRect.w, hud.mapRect.h,
-          'white-on-dark',
+          'dark-on-white',
           'binMap',
           mapOcrWorker
         );
@@ -2130,7 +2028,6 @@ html_content = r'''<!DOCTYPE html>
         }
       }
 
-      // B. Read EXP Bar
       const rawExpStr = await readLinePixelCrisp(
         workCanvas,
         hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h,
@@ -2195,7 +2092,6 @@ html_content = r'''<!DOCTYPE html>
         $('readExp').textContent = `Raw: "${rawExpStr}"`;
       }
 
-      // C. Read Inventory Mesos
       if (inv) {
         const rawMesoStr = await readLinePixelCrisp(
           workCanvas,
@@ -2228,7 +2124,6 @@ html_content = r'''<!DOCTYPE html>
         }
       }
 
-      // D. Read ONLY Selected/Tracked Quickslots
       if (state.trackPots) {
         for (let i = 0; i < state.slotCount; i++) {
           const slotKey = `${state.slotCount}_${i}`;
@@ -2681,9 +2576,3 @@ html_content = r'''<!DOCTYPE html>
 </script>
 </body>
 </html>
-'''
-
-with open('index.html', 'w', encoding='utf-8') as f:
-    f.write(html_content)
-
-print(f"Saved fixed index.html ({len(html_content)} bytes)")
