@@ -555,9 +555,9 @@
       exp: { dx: 0, dy: 0 },
       qs:  { dx: 0, dy: 0 }
     }),
-    // Normalized drag-calibrated boxes (saved relative to frame size, just like Maple Track)
+    // Normalized drag-calibrated boxes (saved relative to frame size)
     customNorm: safeLoad('ms_customNorm_v2', {
-      exp:  null, // { x, y, w, h } in 0..1
+      exp:  null,
       meso: null,
       qs:   null
     }),
@@ -910,7 +910,7 @@
   }
   renderQuickslotCards();
 
-  // --- Automatic 32x32 Quickslot Panel Finder (Finds the actual white-framed 32x32 slot tiles!) ---
+  // --- Automatic 32x32 Quickslot Panel Finder ---
   function findQuickslotPanel(w, h, data, gameLeft, clientW, gameBottom) {
     const cols = 4;
     const rows = state.slotCount === 12 ? 3 : 2;
@@ -931,7 +931,6 @@
       };
     }
 
-    // Search bottom-right region for the top-left white corner of Slot 1 (which sits right next to the 1 keycap)
     const searchX0 = gameLeft + Math.floor(clientW * 0.55);
     const searchX1 = gameLeft + clientW - (cols * slotW) - 4;
     const searchY0 = gameBottom - 135;
@@ -943,7 +942,6 @@
 
     for (let y = searchY0; y <= searchY1; y++) {
       for (let x = searchX0; x <= searchX1; x++) {
-        // Check if (x, y) is the top-left corner of a 4xN grid of 32x32 white-backed slots spaced 35x34px apart
         let whiteHits = 0;
         let darkFrameHits = 0;
 
@@ -952,11 +950,9 @@
             const sx = x + c * slotW;
             const sy = y + r * slotH;
 
-            // Dark border 1px left of slot (sx - 1, sy + 16)
             const bi = ((sy + 16) * w + (sx - 1)) * 4;
             if (data[bi] < 110 && data[bi + 1] < 110 && data[bi + 2] < 110) darkFrameHits++;
 
-            // Bright white interior near top-right of slot (sx + 25, sy + 5) and bottom-right (sx + 28, sy + 28)
             const wi1 = ((sy + 5) * w + (sx + 25)) * 4;
             if (data[wi1] > 215 && data[wi1 + 1] > 215 && data[wi1 + 2] > 215) whiteHits++;
 
@@ -1106,10 +1102,11 @@
                 winY: Math.max(0, y - 248),
                 winW: 172,
                 winH: 290,
+                // Offset +34px past the gold MESO coin icon so only the white number field is cropped
                 mesoRect: {
-                  x: x,
+                  x: x + 34,
                   y: y - 2,
-                  w: 112,
+                  w: 84,
                   h: 17
                 }
               };
@@ -1216,8 +1213,9 @@
         'white-on-dark',
         'binExp'
       );
-      const cleanExpStr = rawExpStr.replace(/\s+/g, '');
-      const expMatch = cleanExpStr.match(/([\d,\.]+)[\[\(\|1I]?(\d{1,2}\.\d{1,2})%?/);
+
+      // Anchor on the decimal percentage at the end (e.g. "49.94%") FIRST so EXP digits never steal the tens digit
+      const expMatch = rawExpStr.match(/([\d,]{1,12})[^\d\.]*(\d{1,2}\.\d{2})\s*%?/);
 
       if (expMatch) {
         const parsedExp = parseInt(expMatch[1].replace(/[^\d]/g, ''), 10);
@@ -1240,8 +1238,8 @@
             }
           }
         }
-      } else if (cleanExpStr) {
-        $('readExp').textContent = `Raw: "${cleanExpStr}"`;
+      } else if (rawExpStr) {
+        $('readExp').textContent = `Raw: "${rawExpStr}"`;
       }
 
       // B. Read Inventory Mesos
@@ -1294,7 +1292,6 @@
             state.slotLive[i] = { count: null, lastCount: null, used: 0, restocked: 0 };
           }
 
-          // Missing/unreadable digits are ignored so last valid count is preserved
           if (rawCount.length > 0) {
             const count = parseInt(rawCount, 10);
             if (!isNaN(count) && count >= 1 && count <= 9999) {
