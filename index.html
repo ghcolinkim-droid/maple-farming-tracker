@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MapleStory Classic — Smart EXP & Profit Tracker</title>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <title>MapleStory Classic — Auto-Detect EXP & Profit Tracker</title>
   <style>
     :root {
       --bg: #0f1117;
@@ -133,18 +132,12 @@
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
-    .workspace {
-      display: grid;
-      grid-template-columns: 1.45fr 1fr;
-      gap: 14px;
-    }
-    @media (max-width: 900px) { .workspace { grid-template-columns: 1fr; } }
-
     .card {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 14px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
     }
     .card-head {
       display: flex;
@@ -154,115 +147,127 @@
       gap: 8px;
       margin-bottom: 10px;
     }
-    .card h2 { font-size: 0.92rem; color: var(--text); }
+    .card h2 { font-size: 0.95rem; color: var(--text); }
 
-    .video-viewport {
+    .detect-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 900px) { .detect-grid { grid-template-columns: 1fr; } }
+
+    .preview-box {
+      position: relative;
       width: 100%;
-      height: 390px;
+      aspect-ratio: 16 / 9;
       background: #08090d;
       border: 1px solid var(--border);
       border-radius: 8px;
-      overflow: auto;
-      position: relative;
+      overflow: hidden;
     }
-    .video-stage {
-      position: relative;
+    canvas#overlayCanvas {
       width: 100%;
       height: 100%;
-      user-select: none;
-      cursor: crosshair;
-      transform-origin: top left;
-    }
-    .video-stage.zoomed {
-      width: 240%;
-      height: 240%;
-    }
-    video {
-      width: 100%;
-      height: 100%;
-      object-fit: fill;
       display: block;
     }
-    .roi-box {
-      position: absolute;
-      border: 2px solid;
-      pointer-events: none;
-      font-size: 9px;
-      font-weight: 700;
-      line-height: 1;
-      padding: 1px 3px;
-      border-radius: 2px;
-      white-space: nowrap;
-    }
-    .roi-exp { border-color: var(--accent); background: rgba(79, 140, 255, 0.25); color: #fff; }
-    .roi-meso { border-color: var(--amber); background: rgba(245, 158, 11, 0.25); color: #fff; }
-    .roi-pot1 { border-color: var(--red); background: rgba(239, 68, 68, 0.25); color: #fff; }
-    .roi-pot2 { border-color: var(--purple); background: rgba(168, 85, 247, 0.25); color: #fff; }
-    .roi-drag { border: 2px dashed #fff; background: rgba(255,255,255,0.2); position: absolute; pointer-events: none; }
 
-    .crop-toolbar {
+    .status-list {
       display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 10px;
-      align-items: center;
+      flex-direction: column;
+      gap: 8px;
     }
-    .crop-toolbar span { font-size: 0.78rem; color: var(--muted); }
-
-    .nudge-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px solid var(--border);
-      align-items: center;
-      font-size: 0.76rem;
-      color: var(--muted);
-    }
-
-    .ocr-row {
+    .status-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
+      gap: 10px;
       background: var(--panel-alt);
       border: 1px solid var(--border);
       border-radius: 7px;
-      padding: 8px 10px;
-      margin-bottom: 8px;
+      padding: 9px 12px;
     }
-    .preview-pair {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .preview-pair canvas {
-      height: 34px;
-      max-width: 115px;
+    .status-item canvas {
+      height: 28px;
+      max-width: 160px;
       border: 1px solid var(--border);
       border-radius: 4px;
       image-rendering: pixelated;
+      background: #000;
     }
-    .ocr-meta { font-size: 0.76rem; color: var(--muted); }
-    .ocr-read { font-weight: 700; color: var(--text); font-family: monospace; font-size: 0.9rem; }
+    .s-lbl { font-size: 0.76rem; color: var(--muted); }
+    .s-val { font-family: monospace; font-weight: 700; font-size: 0.92rem; color: var(--text); }
 
-    .form-grid {
+    /* Quickslot Grid (8 or 12 slots) */
+    .qs-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 8px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 10px;
     }
-    label { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--muted); }
-    input {
+    .qs-grid.cols-6 {
+      grid-template-columns: repeat(6, 1fr);
+    }
+    @media (max-width: 900px) {
+      .qs-grid, .qs-grid.cols-6 { grid-template-columns: repeat(2, 1fr); }
+    }
+    .qs-card {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .qs-card.tracked {
+      border-color: var(--accent);
+      background: rgba(79, 140, 255, 0.08);
+    }
+    .qs-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .qs-top canvas {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      image-rendering: pixelated;
+      background: #000;
+    }
+    .qs-count {
+      font-family: monospace;
+      font-weight: 800;
+      font-size: 0.95rem;
+    }
+    .qs-meta {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    select, input {
       background: var(--bg);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 6px 8px;
-      border-radius: 6px;
-      font-size: 0.85rem;
+      padding: 5px 7px;
+      border-radius: 5px;
+      font-size: 0.8rem;
+      width: 100%;
     }
-    input:focus { outline: none; border-color: var(--accent); }
+    select:focus, input:focus { outline: none; border-color: var(--accent); }
+
+    .nudge-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
 
     table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
     th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
@@ -274,16 +279,17 @@
 
   <header>
     <div class="brand">
-      <h1>🍁 Maple Grind Tracker</h1>
-      <span id="statusBadge" class="badge idle">Idle — Select Screen</span>
+      <h1>🍁 Maple Auto-Tracker</h1>
+      <span id="statusBadge" class="badge idle">Waiting for Sharing</span>
     </div>
     <div class="controls">
-      <button id="btnCapture" class="primary">1. Capture Maple Window</button>
+      <button id="btnCapture" class="primary">1. Share Maple Window</button>
       <button id="btnGrind" class="green" disabled>▶ Grind</button>
       <button id="btnNpc" class="amber" disabled>💰 NPC Sell (Pause EXP)</button>
       <button id="btnPause" class="red" disabled>⏸ Pause</button>
       <button id="btnPip" class="purple">📌 Float Mini HUD</button>
       <button id="btnSaveSession" disabled>💾 Save & Reset</button>
+      <button id="btnResetNoSave" disabled>🔄 Reset (No Save)</button>
     </div>
   </header>
 
@@ -292,7 +298,7 @@
     <div class="kpi-card">
       <div class="kpi-label"><span>EXP / Hour</span><span id="expClock">00:00:00</span></div>
       <div id="kpiExpHr" class="kpi-value val-blue">0</div>
-      <div id="kpiExpSub" class="kpi-sub">Session: +0 EXP (0.00%)</div>
+      <div id="kpiExpSub" class="kpi-sub">Session: +0 EXP</div>
     </div>
 
     <div class="kpi-card">
@@ -308,164 +314,96 @@
     </div>
 
     <div class="kpi-card">
-      <div class="kpi-label"><span>Meso & Potion Breakdown</span><span>Live</span></div>
+      <div class="kpi-label"><span>Meso & Potion Breakdown</span><span id="invStatusTag">Inv: Closed</span></div>
       <div id="kpiGrossMeso" class="kpi-value val-amber">+0</div>
       <div id="kpiPotBurn" class="kpi-sub">Pot Burn: -0 mesos (0 pots)</div>
     </div>
   </section>
 
-  <!-- Navigation Tabs -->
+  <!-- Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-live">Screen Calibration & OCR</button>
-    <button class="tab-btn" data-tab="tab-pots">Potions & Manual Adjustments</button>
+    <button class="tab-btn active" data-tab="tab-live">Auto-HUD & Quickslots</button>
     <button class="tab-btn" data-tab="tab-logs">Saved Grind Logs & Backup</button>
   </div>
 
-  <!-- Tab 1: Screen Capture & Crop Boxes -->
+  <!-- Tab 1: Auto-Detection + Quickslot Potions -->
   <div id="tab-live" class="tab-panel active">
-    <div class="workspace">
-      <div class="card">
-        <div class="card-head">
-          <h2>2. Auto-Preset or Drag Boxes</h2>
-          <div style="display:flex; gap:6px;">
-            <button id="btnPreset1366" class="sm green">⚡ Snap to 1366×768 HUD</button>
-            <button id="btnZoom" class="sm primary">🔍 Zoom 2.4x</button>
-          </div>
-        </div>
-        <div class="video-viewport" id="videoViewport">
-          <div class="video-stage" id="videoStage">
-            <video id="gameVideo" autoplay muted playsinline></video>
-            <div id="boxExp" class="roi-box roi-exp" style="display:none">EXP</div>
-            <div id="boxMeso" class="roi-box roi-meso" style="display:none">MESO</div>
-            <div id="boxPot1" class="roi-box roi-pot1" style="display:none">HP</div>
-            <div id="boxPot2" class="roi-box roi-pot2" style="display:none">MP</div>
-            <div id="dragRect" class="roi-drag" style="display:none"></div>
-          </div>
-        </div>
-        <div class="crop-toolbar">
-          <span>Active Box:</span>
-          <button data-target="exp" class="target-btn sm primary">EXP Bar</button>
-          <button data-target="meso" class="target-btn sm">Inventory Meso</button>
-          <button data-target="pot1" class="target-btn sm">HP Pot Count</button>
-          <button data-target="pot2" class="target-btn sm">MP Pot Count</button>
-          <button id="btnClearBoxes" class="sm" style="margin-left:auto">Reset All</button>
-        </div>
-        <div class="nudge-bar">
-          <span>Fine-Tune Active Box:</span>
-          <button class="sm" data-nudge="dx:-2">←←</button>
-          <button class="sm" data-nudge="dx:-1">←</button>
-          <button class="sm" data-nudge="dx:1">→</button>
-          <button class="sm" data-nudge="dx:2">→→</button>
-          <button class="sm" data-nudge="dy:-1">↑</button>
-          <button class="sm" data-nudge="dy:1">↓</button>
-          <button class="sm" data-nudge="dw:2">+W</button>
-          <button class="sm" data-nudge="dw:-2">-W</button>
-          <button class="sm" data-nudge="dh:2">+H</button>
-          <button class="sm" data-nudge="dh:-2">-H</button>
+    <div class="card">
+      <div class="card-head">
+        <h2>Automatic HUD & Inventory Detection</h2>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+          <span id="detectedRes" style="font-size:0.78rem; color:var(--muted);">Client: Not detected</span>
+          <button id="btnRescan" class="sm green">🔍 Rescan HUD & Inventory</button>
         </div>
       </div>
 
-      <div class="card">
-        <h2>Live Crop & OCR Previews (Raw vs Processed)</h2>
-        <div class="ocr-row">
-          <div>
-            <div class="ocr-meta">EXP Digits</div>
-            <div id="readExp" class="ocr-read">Waiting...</div>
-          </div>
-          <div class="preview-pair">
-            <canvas id="rawExp" title="Raw Game Crop"></canvas>
-            <canvas id="cvsExp" title="OCR Input"></canvas>
-          </div>
+      <div class="detect-grid">
+        <div class="preview-box">
+          <canvas id="overlayCanvas"></canvas>
         </div>
 
-        <div class="ocr-row">
-          <div>
-            <div class="ocr-meta">Inventory Mesos</div>
-            <div id="readMeso" class="ocr-read">Waiting...</div>
+        <div class="status-list">
+          <div class="status-item">
+            <div>
+              <div class="s-lbl">Auto-Detected EXP Bar</div>
+              <div id="readExp" class="s-val">Waiting for window...</div>
+            </div>
+            <canvas id="cropExp"></canvas>
           </div>
-          <div class="preview-pair">
-            <canvas id="rawMeso" title="Raw Game Crop"></canvas>
-            <canvas id="cvsMeso" title="OCR Input"></canvas>
+
+          <div class="status-item">
+            <div>
+              <div class="s-lbl">Auto-Detected Inventory Mesos (Press <code>I</code>)</div>
+              <div id="readMeso" class="s-val">Open Inventory to sync</div>
+            </div>
+            <canvas id="cropMeso"></canvas>
+          </div>
+
+          <div class="status-item">
+            <div style="width:100%;">
+              <div class="s-lbl" style="margin-bottom:4px;">Quick Manual Meso Adjustment (+/-)</div>
+              <div style="display:flex; gap:6px;">
+                <input type="number" id="manualMesoInput" placeholder="e.g. 50000" />
+                <button id="btnAddMeso" class="sm" style="white-space:nowrap;">Apply</button>
+              </div>
+            </div>
           </div>
         </div>
-
-        <div class="ocr-row">
-          <div>
-            <div class="ocr-meta">HP Potion Count</div>
-            <div id="readPot1" class="ocr-read">Waiting...</div>
-          </div>
-          <div class="preview-pair">
-            <canvas id="rawPot1" title="Raw Game Crop"></canvas>
-            <canvas id="cvsPot1" title="OCR Input"></canvas>
-          </div>
-        </div>
-
-        <div class="ocr-row">
-          <div>
-            <div class="ocr-meta">MP Potion Count</div>
-            <div id="readPot2" class="ocr-read">Waiting...</div>
-          </div>
-          <div class="preview-pair">
-            <canvas id="rawPot2" title="Raw Game Crop"></canvas>
-            <canvas id="cvsPot2" title="OCR Input"></canvas>
-          </div>
-        </div>
-
-        <p style="font-size:0.78rem; color:var(--muted); margin-top:8px; line-height:1.5;">
-          👀 Look at the <strong>left color box</strong> in each row—it shows the exact live pixels inside your crop box so you can tell right away if the box is on the numbers!
-        </p>
       </div>
+
+      <div class="nudge-strip">
+        <span>HUD Offset Fine-Tune (only if Windows border shifts 1–2px):</span>
+        <button class="sm" data-hud-nudge="dx:-1">← X</button>
+        <button class="sm" data-hud-nudge="dx:1">X →</button>
+        <button class="sm" data-hud-nudge="dy:-1">↑ Y</button>
+        <button class="sm" data-hud-nudge="dy:1">Y ↓</button>
+        <button class="sm" id="btnResetHudOffset">Reset Offset</button>
+      </div>
+    </div>
+
+    <!-- Quickslot Potions Card -->
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>Quickslot Potions</h2>
+          <p style="font-size:0.78rem; color:var(--muted); margin-top:2px;">
+            Automatically reads your 8- or 12-slot panel. Select a potion type for each tracked slot; leave skills and empty slots as <strong>Not tracked</strong>.
+          </p>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+          <button id="btnToggleSlots" class="sm">Layout: 8 Slots (4×2)</button>
+          <button id="btnResetPotUsage" class="sm amber">Reset Potion Usage</button>
+        </div>
+      </div>
+
+      <div id="quickslotGrid" class="qs-grid"></div>
     </div>
   </div>
 
-  <!-- Tab 2: Potion Prices & Manual Overrides -->
-  <div id="tab-pots" class="tab-panel">
-    <div class="workspace">
-      <div class="card">
-        <h2>Potion Unit Costs (Mesos per Pot)</h2>
-        <div class="form-grid">
-          <label>HP Potion Name
-            <input type="text" id="hpName" value="Ginger Ale / Unagi" />
-          </label>
-          <label>Cost per HP Pot (Mesos)
-            <input type="number" id="hpCost" value="3800" min="0" />
-          </label>
-          <label>MP Potion Name
-            <input type="text" id="mpName" value="Mana Elixir / Ginger Ale" />
-          </label>
-          <label>Cost per MP Pot (Mesos)
-            <input type="number" id="mpCost" value="600" min="0" />
-          </label>
-        </div>
-        <p style="font-size:0.78rem; color:var(--muted); margin-top:10px;">
-          If you use one combo potion (like Ginger Ale), set HP Pot Cost to <strong>3800</strong> and MP Pot Cost to <strong>0</strong>.
-        </p>
-      </div>
-
-      <div class="card">
-        <h2>Quick Manual Adjustments (Optional)</h2>
-        <div class="form-grid">
-          <label>Add/Subtract Mesos (+/-)
-            <input type="number" id="manualMesoInput" placeholder="e.g. 45000" />
-          </label>
-          <div style="display:flex; align-items:flex-end;">
-            <button id="btnAddMeso" style="width:100%">Apply Meso Adjustment</button>
-          </div>
-          <label>Add Used HP Pots
-            <input type="number" id="manualHpInput" placeholder="e.g. 50" />
-          </label>
-          <div style="display:flex; align-items:flex-end;">
-            <button id="btnAddHp" style="width:100%">Add HP Pots Used</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Tab 3: Saved Session Logs & Backup -->
+  <!-- Tab 2: Saved Logs & JSON/CSV Backup -->
   <div id="tab-logs" class="tab-panel">
     <div class="card">
-      <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+      <div class="card-head">
         <h2>Saved Grind Sessions & Settings Backup</h2>
         <div style="display:flex; flex-wrap:wrap; gap:6px;">
           <button id="btnExportJson">📤 Backup JSON</button>
@@ -490,9 +428,20 @@
     </div>
   </div>
 
+  <video id="hiddenVideo" autoplay muted playsinline style="display:none;"></video>
+
 <script>
 (() => {
-  function safeLoadJson(key, fallback) {
+  const $ = id => document.getElementById(id);
+  const video = $('hiddenVideo');
+  const overlayCanvas = $('overlayCanvas');
+  const oCtx = overlayCanvas.getContext('2d', { willReadFrequently: true });
+
+  // Offscreen work canvas for full-resolution pixel scanning
+  const workCanvas = document.createElement('canvas');
+  const wCtx = workCanvas.getContext('2d', { willReadFrequently: true });
+
+  function safeLoad(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : fallback;
@@ -501,6 +450,162 @@
     }
   }
 
+  // --- Preset MapleStory Classic Potions (MeowDB / Classic NPC Prices) ---
+  const POTION_PRESETS = [
+    { id: 'none',       name: 'Not tracked',        cost: 0 },
+    { id: 'ginger_ale', name: 'Ginger Ale (HP+MP)', cost: 3800 },
+    { id: 'unagi',      name: 'Unagi (1000 HP)',    cost: 1100 },
+    { id: 'white_pot',  name: 'White Potion',       cost: 320 },
+    { id: 'orange_pot', name: 'Orange Potion',      cost: 160 },
+    { id: 'red_pot',    name: 'Red Potion',         cost: 50 },
+    { id: 'mana_elix',  name: 'Mana Elixir',        cost: 600 },
+    { id: 'pure_water', name: 'Pure Water',         cost: 850 },
+    { id: 'blue_pot',   name: 'Blue Potion',        cost: 200 },
+    { id: 'sorc_elix',  name: 'Wizard/Sorc Elixir', cost: 500 },
+    { id: 'custom',     name: 'Custom Price...',    cost: 1000 }
+  ];
+
+  // --- MapleStory Classic 5x7 Bitmap Font Templates (1 = white text pixel, 0 = background) ---
+  // Normalized binary templates for MapleStory Classic's crisp HUD bitmap digits
+  const GLYPH_TEMPLATES = {
+    '0': [
+      '01110',
+      '10001',
+      '10011',
+      '10101',
+      '11001',
+      '10001',
+      '01110'
+    ],
+    '1': [
+      '00100',
+      '01100',
+      '00100',
+      '00100',
+      '00100',
+      '00100',
+      '01110'
+    ],
+    '2': [
+      '01110',
+      '10001',
+      '00001',
+      '00110',
+      '01000',
+      '10000',
+      '11111'
+    ],
+    '3': [
+      '01110',
+      '10001',
+      '00001',
+      '00110',
+      '00001',
+      '10001',
+      '01110'
+    ],
+    '4': [
+      '00010',
+      '00110',
+      '01010',
+      '10010',
+      '11111',
+      '00010',
+      '00010'
+    ],
+    '5': [
+      '11111',
+      '10000',
+      '11110',
+      '00001',
+      '00001',
+      '10001',
+      '01110'
+    ],
+    '6': [
+      '01110',
+      '10000',
+      '11110',
+      '10001',
+      '10001',
+      '10001',
+      '01110'
+    ],
+    '7': [
+      '11111',
+      '00001',
+      '00010',
+      '00100',
+      '01000',
+      '01000',
+      '01000'
+    ],
+    '8': [
+      '01110',
+      '10001',
+      '10001',
+      '01110',
+      '10001',
+      '10001',
+      '01110'
+    ],
+    '9': [
+      '01110',
+      '10001',
+      '10001',
+      '01111',
+      '00001',
+      '00010',
+      '01100'
+    ],
+    '.': [
+      '0',
+      '0',
+      '0',
+      '0',
+      '0',
+      '1',
+      '1'
+    ],
+    ',': [
+      '00',
+      '00',
+      '00',
+      '00',
+      '00',
+      '01',
+      '10'
+    ],
+    '%': [
+      '11001',
+      '11010',
+      '00100',
+      '00100',
+      '01011',
+      '10011',
+      '00000'
+    ],
+    '[': [
+      '11',
+      '10',
+      '10',
+      '10',
+      '10',
+      '10',
+      '11'
+    ],
+    ']': [
+      '11',
+      '01',
+      '01',
+      '01',
+      '01',
+      '01',
+      '11'
+    ]
+  };
+
+  // --- App State ---
   const state = {
     mode: 'idle',
     expSeconds: 0,
@@ -513,27 +618,21 @@
 
     lastMeso: null,
     grossMesoGained: 0,
+    manualMesoOffset: 0,
 
-    lastPot1: null,
-    pot1Used: 0,
-    lastPot2: null,
-    pot2Used: 0,
+    slotCount: safeLoad('ms_slotCount', 8), // 8 (4x2) or 12 (6x2)
+    slotConfig: safeLoad('ms_slotConfig', {}), // { "8_0": { preset: "ginger_ale", cost: 3800 }, ... }
+    slotLive: {}, // { 0: { count: 59, lastCount: 59, used: 0 }, ... }
 
-    activeTarget: 'exp',
-    isZoomed: false,
-    rois: safeLoadJson('ms_rois', {}),
-    logs: safeLoadJson('ms_logs', [])
+    hudOffset: safeLoad('ms_hudOffset', { dx: 0, dy: 0 }),
+    detectedAnchor: null, // { clientX, clientY, clientW, clientH, expRect, qsRect }
+    detectedInvRect: null,
+
+    logs: safeLoad('ms_logs', [])
   };
 
-  let ocrWorker = null;
   let timerWorker = null;
-  let isScanning = false;
   let pipWindow = null;
-
-  const $ = id => document.getElementById(id);
-  const video = $('gameVideo');
-  const stage = $('videoStage');
-  const viewport = $('videoViewport');
 
   const fmtNum = n => Math.round(n).toLocaleString('en-US');
   const fmtCompact = n => {
@@ -550,30 +649,6 @@
     return `${h}:${m}:${s}`;
   };
 
-  // --- Exact Pixel Coordinates Measured from Your 1366x768 Screenshot ---
-  $('btnPreset1366').addEventListener('click', () => {
-    // EXP numbers right after the "EXP" tag on the bottom status bar
-    state.rois.exp  = { x: 0.456, y: 0.922, w: 0.118, h: 0.025 };
-    // Top-row Quickslot #1 / #2 bottom-left stack digits
-    state.rois.pot1 = { x: 0.733, y: 0.892, w: 0.024, h: 0.022 };
-    state.rois.pot2 = { x: 0.759, y: 0.892, w: 0.024, h: 0.022 };
-
-    localStorage.setItem('ms_rois', JSON.stringify(state.rois));
-    renderRoiBoxes();
-    if (video.readyState >= 2) runOcrPass();
-  });
-
-  // --- Zoom Toggle ---
-  $('btnZoom').addEventListener('click', () => {
-    state.isZoomed = !state.isZoomed;
-    stage.classList.toggle('zoomed', state.isZoomed);
-    $('btnZoom').textContent = state.isZoomed ? '🔍 Fit 1x' : '🔍 Zoom 2.4x';
-    if (state.isZoomed) {
-      viewport.scrollTop = viewport.scrollHeight;
-      viewport.scrollLeft = viewport.scrollWidth * 0.35;
-    }
-  });
-
   // --- Tabs ---
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -584,657 +659,450 @@
     });
   });
 
-  // --- Load Saved Potion Settings ---
-  function loadPotionInputs() {
-    ['hpName', 'hpCost', 'mpName', 'mpCost'].forEach(key => {
-      const saved = localStorage.getItem('ms_' + key);
-      if (saved !== null) $(key).value = saved;
-    });
-  }
-  loadPotionInputs();
-
-  ['hpName', 'hpCost', 'mpName', 'mpCost'].forEach(key => {
-    $(key).addEventListener('input', () => {
-      localStorage.setItem('ms_' + key, $(key).value);
-      updateUI();
-    });
-  });
-
-  // --- ROI Box Drawing & Nudging ---
-  document.querySelectorAll('.target-btn').forEach(btn => {
+  // --- HUD Fine-Tune Nudge ---
+  document.querySelectorAll('[data-hud-nudge]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.target-btn').forEach(b => b.classList.remove('primary'));
-      btn.classList.add('primary');
-      state.activeTarget = btn.dataset.target;
+      const [axis, valStr] = btn.dataset.hudNudge.split(':');
+      state.hudOffset[axis] += parseInt(valStr, 10);
+      localStorage.setItem('ms_hudOffset', JSON.stringify(state.hudOffset));
+      scanFrame();
     });
   });
 
-  function renderRoiBoxes() {
-    const map = { exp: 'boxExp', meso: 'boxMeso', pot1: 'boxPot1', pot2: 'boxPot2' };
-    for (const [key, elId] of Object.entries(map)) {
-      const el = $(elId);
-      const r = state.rois[key];
-      if (r && typeof r.x === 'number' && r.w > 0 && r.h > 0) {
-        el.style.display = 'block';
-        el.style.left = (r.x * 100) + '%';
-        el.style.top = (r.y * 100) + '%';
-        el.style.width = (r.w * 100) + '%';
-        el.style.height = (r.h * 100) + '%';
-      } else {
-        el.style.display = 'none';
-      }
-    }
-  }
-  renderRoiBoxes();
-
-  document.querySelectorAll('[data-nudge]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const r = state.rois[state.activeTarget];
-      if (!r) return;
-      const vw = video.videoWidth || 1366;
-      const vh = video.videoHeight || 768;
-      const [prop, dirStr] = btn.dataset.nudge.split(':');
-      const dir = parseInt(dirStr, 10);
-
-      if (prop === 'dx') r.x = Math.max(0, Math.min(1 - r.w, r.x + dir / vw));
-      if (prop === 'dy') r.y = Math.max(0, Math.min(1 - r.h, r.y + dir / vh));
-      if (prop === 'dw') r.w = Math.max(2 / vw, Math.min(1 - r.x, r.w + dir / vw));
-      if (prop === 'dh') r.h = Math.max(2 / vh, Math.min(1 - r.y, r.h + dir / vh));
-
-      localStorage.setItem('ms_rois', JSON.stringify(state.rois));
-      renderRoiBoxes();
-      if (video.readyState >= 2) runOcrPass();
-    });
+  $('btnResetHudOffset').addEventListener('click', () => {
+    state.hudOffset = { dx: 0, dy: 0 };
+    localStorage.setItem('ms_hudOffset', JSON.stringify(state.hudOffset));
+    scanFrame();
   });
 
-  $('btnClearBoxes').addEventListener('click', () => {
-    state.rois = {};
-    localStorage.removeItem('ms_rois');
-    renderRoiBoxes();
+  // --- Toggle 8 vs 12 Quickslots ---
+  $('btnToggleSlots').addEventListener('click', () => {
+    state.slotCount = state.slotCount === 8 ? 12 : 8;
+    localStorage.setItem('ms_slotCount', JSON.stringify(state.slotCount));
+    $('btnToggleSlots').textContent = state.slotCount === 8 ? 'Layout: 8 Slots (4×2)' : 'Layout: 12 Slots (6×2)';
+    renderQuickslotCards();
+    scanFrame();
   });
+  $('btnToggleSlots').textContent = state.slotCount === 8 ? 'Layout: 8 Slots (4×2)' : 'Layout: 12 Slots (6×2)';
 
-  let dragStart = null;
-  stage.addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
-    const rect = stage.getBoundingClientRect();
-    dragStart = {
-      x: (e.clientX - rect.left) / rect.width,
-      y: (e.clientY - rect.top) / rect.height
-    };
-    const dr = $('dragRect');
-    dr.style.display = 'block';
-    dr.style.left = (dragStart.x * 100) + '%';
-    dr.style.top = (dragStart.y * 100) + '%';
-    dr.style.width = '0%';
-    dr.style.height = '0%';
-  });
-
-  window.addEventListener('mousemove', e => {
-    if (!dragStart) return;
-    const rect = stage.getBoundingClientRect();
-    const curX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const curY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    const x = Math.min(dragStart.x, curX);
-    const y = Math.min(dragStart.y, curY);
-    const w = Math.abs(curX - dragStart.x);
-    const h = Math.abs(curY - dragStart.y);
-    const dr = $('dragRect');
-    dr.style.left = (x * 100) + '%';
-    dr.style.top = (y * 100) + '%';
-    dr.style.width = (w * 100) + '%';
-    dr.style.height = (h * 100) + '%';
-  });
-
-  window.addEventListener('mouseup', e => {
-    if (!dragStart) return;
-    const rect = stage.getBoundingClientRect();
-    const curX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const curY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    const x = Math.min(dragStart.x, curX);
-    const y = Math.min(dragStart.y, curY);
-    const w = Math.abs(curX - dragStart.x);
-    const h = Math.abs(curY - dragStart.y);
-    dragStart = null;
-    $('dragRect').style.display = 'none';
-
-    if (w > 0.003 && h > 0.003) {
-      state.rois[state.activeTarget] = { x, y, w, h };
-      localStorage.setItem('ms_rois', JSON.stringify(state.rois));
-      renderRoiBoxes();
-      if (video.readyState >= 2) runOcrPass();
-    }
-  });
-
-  // --- Floating Picture-in-Picture Mini HUD ---
-  $('btnPip').addEventListener('click', async () => {
-    if (pipWindow && !pipWindow.closed) {
-      pipWindow.focus();
-      return;
-    }
-
-    try {
-      if ('documentPictureInPicture' in window) {
-        pipWindow = await window.documentPictureInPicture.requestWindow({
-          width: 330,
-          height: 158
-        });
-      } else {
-        pipWindow = window.open('', 'MapleMiniHUD', 'width=330,height=158,menubar=no,toolbar=no,location=no,status=no');
-      }
-
-      if (!pipWindow) return;
-
-      pipWindow.document.head.innerHTML = `
-        <title>🍁 Mini HUD</title>
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-          body {
-            background: #0f1117;
-            color: #e6e9f0;
-            padding: 10px 12px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            height: 100vh;
-            user-select: none;
-            overflow: hidden;
-          }
-          .top { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #8b93a7; }
-          .pill { padding: 2px 7px; border-radius: 99px; font-weight: 700; font-size: 10px; text-transform: uppercase; }
-          .pill.idle { background: #2c3142; color: #8b93a7; }
-          .pill.grinding { background: rgba(34,197,94,0.2); color: #22c55e; }
-          .pill.npc { background: rgba(245,158,11,0.2); color: #f59e0b; }
-          .pill.paused { background: rgba(239,68,68,0.2); color: #ef4444; }
-          .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
-          .box { background: #181b24; border: 1px solid #2c3142; border-radius: 7px; padding: 6px 9px; }
-          .lbl { font-size: 10px; color: #8b93a7; text-transform: uppercase; display: flex; justify-content: space-between; }
-          .val { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 1px; }
-          .blue { color: #4f8cff; }
-          .green { color: #22c55e; }
-          .red { color: #ef4444; }
-          .btns { display: grid; grid-template-columns: 1fr 1.2fr 0.9fr; gap: 6px; }
-          button {
-            background: #202430; color: #e6e9f0; border: 1px solid #2c3142;
-            border-radius: 5px; padding: 5px 6px; font-size: 11px; font-weight: 700; cursor: pointer;
-          }
-          button:hover { border-color: #4f8cff; }
-          button.g { border-color: rgba(34,197,94,0.5); color: #22c55e; }
-          button.a { border-color: rgba(245,158,11,0.5); color: #f59e0b; }
-          button.r { border-color: rgba(239,68,68,0.5); color: #ef4444; }
-        </style>
-      `;
-
-      pipWindow.document.body.innerHTML = `
-        <div class="top">
-          <span id="pipStatus" class="pill idle">Idle</span>
-          <span id="pipClock">00:00:00</span>
-        </div>
-        <div class="stats">
-          <div class="box">
-            <div class="lbl"><span>EXP / hr</span><span id="pipTtl">--:--</span></div>
-            <div id="pipExp" class="val blue">0</div>
-          </div>
-          <div class="box">
-            <div class="lbl"><span>Net / hr</span><span id="pipPct">0.0%</span></div>
-            <div id="pipNet" class="val green">0</div>
-          </div>
-        </div>
-        <div class="btns">
-          <button id="pipBtnGrind" class="g">▶ Grind</button>
-          <button id="pipBtnNpc" class="a">💰 NPC Sell</button>
-          <button id="pipBtnPause" class="r">⏸ Pause</button>
-        </div>
-      `;
-
-      pipWindow.document.getElementById('pipBtnGrind').onclick = () => { if (state.mode !== 'idle') setMode('grinding'); };
-      pipWindow.document.getElementById('pipBtnNpc').onclick = () => { if (state.mode !== 'idle') setMode('npc'); };
-      pipWindow.document.getElementById('pipBtnPause').onclick = () => { if (state.mode !== 'idle') setMode('paused'); };
-
-      updateUI();
-    } catch (err) {
-      console.error('Could not open Mini HUD:', err);
-    }
-  });
-
-  // --- Background Web Worker Timer ---
-  function startBackgroundTimer() {
-    if (timerWorker) return;
-    const blob = new Blob([`
-      setInterval(() => postMessage('tick'), 1000);
-    `], { type: 'application/javascript' });
-    timerWorker = new Worker(URL.createObjectURL(blob));
-    let tickCount = 0;
-
-    timerWorker.onmessage = () => {
-      if (state.mode === 'grinding') {
-        state.expSeconds += 1;
-        state.mesoSeconds += 1;
-      } else if (state.mode === 'npc') {
-        state.mesoSeconds += 1;
-      }
-      updateUI();
-
-      tickCount++;
-      if (tickCount % 3 === 0 && video.readyState >= 2) {
-        runOcrPass();
-      }
-    };
-  }
-
-  // --- Initialize Tesseract OCR Worker ---
-  async function initOcr() {
-    if (ocrWorker) return;
-    ocrWorker = await Tesseract.createWorker('eng');
-    await ocrWorker.setParameters({
-      tessedit_char_whitelist: '0123456789.,[]()% ',
-      tessedit_pageseg_mode: '7'
-    });
-  }
-
-  // --- Screen Capture ---
-  $('btnCapture').addEventListener('click', async () => {
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          displaySurface: 'window',
-          cursor: 'never',
-          frameRate: 15
-        },
-        audio: false,
-        selfBrowserSurface: 'exclude'
-      });
-      video.srcObject = stream;
-      await video.play();
-
-      $('btnGrind').disabled = false;
-      $('btnNpc').disabled = false;
-      $('btnPause').disabled = false;
-      $('btnSaveSession').disabled = false;
-      setMode('grinding');
-
-      await initOcr();
-      startBackgroundTimer();
-      runOcrPass();
-    } catch (err) {
-      $('statusBadge').textContent = 'Capture Error: ' + (err.name || 'Cancelled');
-      console.error('Screen capture failed:', err);
-    }
-  });
-
-  // --- Mode Switching ---
-  function setMode(newMode) {
-    state.mode = newMode;
-    const badge = $('statusBadge');
-    badge.className = 'badge ' + newMode;
-
-    if (newMode === 'grinding') {
-      badge.textContent = '● Grinding (EXP + Meso Live)';
-    } else if (newMode === 'npc') {
-      badge.textContent = '💰 NPC Sell Mode (EXP Paused)';
-    } else if (newMode === 'paused') {
-      badge.textContent = '⏸ Full Pause';
+  $('btnResetPotUsage').addEventListener('click', () => {
+    for (const k of Object.keys(state.slotLive)) {
+      state.slotLive[k].used = 0;
+      state.slotLive[k].lastCount = state.slotLive[k].count;
     }
     updateUI();
+    renderQuickslotCards();
+  });
+
+  // --- Build Quickslot UI Cards ---
+  function renderQuickslotCards() {
+    const grid = $('quickslotGrid');
+    grid.className = 'qs-grid' + (state.slotCount === 12 ? ' cols-6' : '');
+    grid.innerHTML = '';
+
+    const keyLabels8  = ['Shift', 'Ins', 'Home', 'PgUp', 'Ctrl', 'Del', 'End', 'PgDn'];
+    const keyLabels12 = ['Shift', 'Ins', 'Home', 'PgUp', 'Q', 'W', 'Ctrl', 'Del', 'End', 'PgDn', 'E', 'R'];
+    const labels = state.slotCount === 12 ? keyLabels12 : keyLabels8;
+
+    for (let i = 0; i < state.slotCount; i++) {
+      const cfgKey = `${state.slotCount}_${i}`;
+      const cfg = state.slotConfig[cfgKey] || { preset: 'none', cost: 0 };
+      const live = state.slotLive[i] || { count: null, used: 0 };
+      const isTracked = cfg.preset !== 'none';
+
+      const card = document.createElement('div');
+      card.className = 'qs-card' + (isTracked ? ' tracked' : '');
+
+      const optionsHtml = POTION_PRESETS.map(p =>
+        `<option value="${p.id}" ${cfg.preset === p.id ? 'selected' : ''}>${p.name}${p.cost > 0 && p.id !== 'custom' ? ` (${p.cost}m)` : ''}</option>`
+      ).join('');
+
+      card.innerHTML = `
+        <div class="qs-top">
+          <canvas id="qsCvs_${i}" width="32" height="32"></canvas>
+          <div style="text-align:right;">
+            <div class="qs-meta">Slot ${i + 1} (${labels[i]})</div>
+            <div id="qsCnt_${i}" class="qs-count">${live.count !== null ? live.count : '—'}</div>
+          </div>
+        </div>
+        <select id="qsSel_${i}">${optionsHtml}</select>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+          <span id="qsUsed_${i}" class="qs-meta">Used: ${live.used}</span>
+          <input id="qsCost_${i}" type="number" min="0" value="${cfg.cost}" style="width:72px; padding:3px 5px; font-size:0.75rem;" title="Mesos per potion" ${!isTracked ? 'disabled' : ''} />
+        </div>
+      `;
+      grid.appendChild(card);
+
+      $(`qsSel_${i}`).addEventListener('change', e => {
+        const presetId = e.target.value;
+        const found = POTION_PRESETS.find(p => p.id === presetId) || POTION_PRESETS[0];
+        state.slotConfig[cfgKey] = {
+          preset: presetId,
+          cost: presetId === 'custom' ? (cfg.cost || 1000) : found.cost
+        };
+        localStorage.setItem('ms_slotConfig', JSON.stringify(state.slotConfig));
+        renderQuickslotCards();
+        updateUI();
+      });
+
+      $(`qsCost_${i}`).addEventListener('input', e => {
+        state.slotConfig[cfgKey].cost = Math.max(0, parseFloat(e.target.value) || 0);
+        localStorage.setItem('ms_slotConfig', JSON.stringify(state.slotConfig));
+        updateUI();
+      });
+    }
+  }
+  renderQuickslotCards();
+
+  // --- Bitmap Font Reader (Zero-Tesseract Exact Pixel Segmenter & Template Matcher) ---
+  function readMapleBitmapText(imgData, mode = 'white') {
+    const { width: w, height: h, data: d } = imgData;
+    // 1. Build binary grid (1 = ink, 0 = background)
+    const bin = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = (y * w + x) * 4;
+        const r = d[idx], g = d[idx + 1], b = d[idx + 2];
+        if (mode === 'white') {
+          // MapleStory white HUD text: high brightness & low saturation
+          const minC = Math.min(r, g, b);
+          const maxC = Math.max(r, g, b);
+          bin[y * w + x] = (minC > 165 && (maxC - minC) < 45) ? 1 : 0;
+        } else {
+          // MapleStory dark text on light grey inventory meso field
+          const lum = r * 0.299 + g * 0.587 + b * 0.114;
+          bin[y * w + x] = lum < 115 ? 1 : 0;
+        }
+      }
+    }
+
+    // 2. Find vertical ink span (the 7px character row)
+    let bestRow = -1, maxRowInk = 0;
+    for (let y = 0; y < h; y++) {
+      let rowInk = 0;
+      for (let x = 0; x < w; x++) rowInk += bin[y * w + x];
+      if (rowInk > maxRowInk) {
+        maxRowInk = rowInk;
+        bestRow = y;
+      }
+    }
+    if (bestRow < 0 || maxRowInk === 0) return '';
+
+    // Expand vertically around bestRow to capture full glyph height (up to 9px)
+    let yTop = bestRow, yBot = bestRow;
+    while (yTop > 0 && (bestRow - yTop) < 6) {
+      let ink = 0;
+      for (let x = 0; x < w; x++) ink += bin[(yTop - 1) * w + x];
+      if (ink === 0) break;
+      yTop--;
+    }
+    while (yBot < h - 1 && (yBot - bestRow) < 6) {
+      let ink = 0;
+      for (let x = 0; x < w; x++) ink += bin[(yBot + 1) * w + x];
+      if (ink === 0) break;
+      yBot++;
+    }
+    const glyphH = yBot - yTop + 1;
+    if (glyphH < 4 || glyphH > 12) return '';
+
+    // 3. Segment characters horizontally by empty columns
+    const chars = [];
+    let inChar = false, xStart = 0;
+    for (let x = 0; x <= w; x++) {
+      let colInk = 0;
+      if (x < w) {
+        for (let y = yTop; y <= yBot; y++) colInk += bin[y * w + x];
+      }
+      if (colInk > 0 && !inChar) {
+        inChar = true;
+        xStart = x;
+      } else if (colInk === 0 && inChar) {
+        inChar = false;
+        const charW = x - xStart;
+        if (charW >= 1 && charW <= 9) {
+          chars.push({ x0: xStart, x1: x - 1, y0: yTop, y1: yBot });
+        }
+      }
+    }
+
+    // 4. Match each segmented character against MapleStory bitmap templates
+    let result = '';
+    let prevX1 = null;
+
+    for (const box of chars) {
+      if (prevX1 !== null && (box.x0 - prevX1) > 4) {
+        result += ' ';
+      }
+      prevX1 = box.x1;
+
+      const cw = box.x1 - box.x0 + 1;
+      const ch = box.y1 - box.y0 + 1;
+
+      // Quick punctuation checks
+      if (cw <= 2 && ch <= 3) {
+        result += '.';
+        continue;
+      }
+
+      let bestChar = '';
+      let bestScore = -1;
+
+      for (const [chKey, tmpl] of Object.entries(GLYPH_TEMPLATES)) {
+        const th = tmpl.length;
+        const tw = tmpl[0].length;
+        if (Math.abs(cw - tw) > 2) continue;
+
+        let matches = 0;
+        let total = th * tw;
+        for (let ty = 0; ty < th; ty++) {
+          const sy = box.y0 + Math.min(ch - 1, Math.floor((ty / th) * ch));
+          for (let tx = 0; tx < tw; tx++) {
+            const sx = box.x0 + Math.min(cw - 1, Math.floor((tx / tw) * cw));
+            const actual = bin[sy * w + sx];
+            const expected = tmpl[ty][tx] === '1' ? 1 : 0;
+            if (actual === expected) matches++;
+          }
+        }
+        const score = matches / total;
+        if (score > bestScore) {
+          bestScore = score;
+          bestChar = chKey;
+        }
+      }
+
+      if (bestScore >= 0.72) {
+        result += bestChar;
+      }
+    }
+
+    return result.trim();
   }
 
-  $('btnGrind').addEventListener('click', () => setMode('grinding'));
-  $('btnNpc').addEventListener('click', () => setMode('npc'));
-  $('btnPause').addEventListener('click', () => setMode('paused'));
+  // --- Automatic Bottom HUD & Quickslot Anchor Detector ---
+  function detectBottomHud(w, h, data) {
+    // 1. Scan bottom 15% of captured window for MapleStory's bright yellow EXP bar fill or gold EXP badge
+    const yStart = Math.floor(h * 0.82);
+    let yellowMinX = w, yellowMaxX = 0, yellowY = -1, yellowCount = 0;
 
-  // --- Dual Raw + Processed Canvas Extraction ---
-  function extractPreprocessedCanvas(roi, rawCanvas, targetCanvas, filterMode = 'auto') {
+    for (let y = yStart; y < h; y++) {
+      let rowYellow = 0;
+      let rMinX = w, rMaxX = 0;
+      for (let x = Math.floor(w * 0.25); x < Math.floor(w * 0.75); x++) {
+        const i = (y * w + x) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        // Bright yellow/gold EXP badge or filled EXP gauge
+        if (r > 210 && g > 175 && b < 70) {
+          rowYellow++;
+          if (x < rMinX) rMinX = x;
+          if (x > rMaxX) rMaxX = x;
+        }
+      }
+      if (rowYellow > 8) {
+        yellowCount += rowYellow;
+        if (rMinX < yellowMinX) yellowMinX = rMinX;
+        if (rMaxX > yellowMaxX) yellowMaxX = rMaxX;
+        yellowY = y;
+      }
+    }
+
+    // 2. Detect Windows title bar & client content bounds
+    // MapleStory Classic windowed client is standard 4:3 or 16:9 inside a Windows title bar (~26-32px tall)
+    let titleBarH = 0;
+    for (let y = 0; y < Math.min(50, h); y++) {
+      const i = (y * w + Math.floor(w * 0.5)) * 4;
+      // Windows 10/11 white/dark title bar transitions into dark/colored game frame
+      if (data[i] < 40 && data[i + 1] < 40 && data[i + 2] < 40 && y > 18) {
+        titleBarH = y;
+        break;
+      }
+    }
+    if (titleBarH === 0 && (h === 799 || h === 800 || h === 798 || h === 630)) {
+      titleBarH = h - (h > 700 ? 768 : 600);
+    }
+
+    const clientH = h - titleBarH;
+    const clientW = w;
+
+    // 3. Compute exact EXP text box & Quickslot grid rectangles anchored to bottom HUD
+    // In MapleStory Classic, the bottom HUD bar is fixed-height (68px) centered or full-width at client bottom
+    const hudTop = titleBarH + clientH - 68 + state.hudOffset.dy;
+
+    // Locate EXP label anchor horizontally (around center-right of status bar)
+    const expLabelX = (yellowCount > 10 && yellowMinX < w * 0.55)
+      ? yellowMinX + 26 + state.hudOffset.dx
+      : Math.floor(clientW * 0.445) + state.hudOffset.dx;
+
+    const expRect = {
+      x: Math.max(0, expLabelX),
+      y: Math.max(0, hudTop + 26),
+      w: 165,
+      h: 16
+    };
+
+    // Quickslot grid sits immediately to the right of the main status buttons (or anchored to right HUD edge)
+    const cols = state.slotCount === 12 ? 6 : 4;
+    const slotW = 35;
+    const slotH = 34;
+    const gridW = cols * slotW;
+    const gridH = 2 * slotH;
+
+    // Anchor quickslot panel right after the blue/orange menu buttons on the status bar
+    const qsStartX = Math.floor(clientW * 0.728) + state.hudOffset.dx;
+    const qsStartY = hudTop + 1;
+
+    const qsRect = {
+      x: Math.max(0, qsStartX),
+      y: Math.max(0, qsStartY),
+      w: gridW,
+      h: gridH,
+      cols,
+      slotW,
+      slotH
+    };
+
+    return { titleBarH, clientW, clientH, expRect, qsRect };
+  }
+
+  // --- Automatic "ITEM INVENTORY" Window Detector ---
+  function detectInventoryWindow(w, h, data) {
+    // MapleStory's "ITEM INVENTORY" window has a distinct blue header bar (~172px wide)
+    // and a light-grey (#EEEEEE / RGB ~238,238,238) MESO box near its bottom
+    const invW = 172;
+    const invH = 293;
+
+    // Scan in 4px steps for the distinctive blue inventory title bar
+    for (let y = 30; y < h - invH; y += 4) {
+      for (let x = 10; x < w - invW; x += 4) {
+        const i = (y * w + x + 40) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        // MapleStory Classic UI window blue header bar
+        if (b > 175 && g > 110 && g < 185 && r < 95) {
+          // Verify light-grey MESO field 256px below this header
+          const mY = y + 256;
+          const mX = x + 65;
+          if (mY < h && mX < w) {
+            const mi = (mY * w + mX) * 4;
+            const mr = data[mi], mg = data[mi + 1], mb = data[mi + 2];
+            if (mr > 215 && mg > 215 && mb > 215 && Math.abs(mr - mb) < 15) {
+              return {
+                winX: x,
+                winY: y,
+                winW: invW,
+                winH: invH,
+                mesoRect: {
+                  x: x + 46,
+                  y: y + 250,
+                  w: 112,
+                  h: 15
+                }
+              };
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  // --- Main Frame Scanner ---
+  function scanFrame() {
+    if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
+
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    if (!vw || !vh) return false;
+    workCanvas.width = vw;
+    workCanvas.height = vh;
+    wCtx.drawImage(video, 0, 0, vw, vh);
+    const fullImg = wCtx.getImageData(0, 0, vw, vh);
 
-    const sx = Math.floor(roi.x * vw);
-    const sy = Math.floor(roi.y * vh);
-    const sw = Math.max(1, Math.floor(roi.w * vw));
-    const sh = Math.max(1, Math.floor(roi.h * vh));
+    // 1. Auto-detect bottom HUD & Quickslots
+    const hud = detectBottomHud(vw, vh, fullImg.data);
+    state.detectedAnchor = hud;
+    $('detectedRes').textContent = `Client: ${hud.clientW}×${hud.clientH} (Auto-Locked)`;
 
-    const scale = 6;
-    const pad = 16;
+    // 2. Auto-detect Inventory window if currently open
+    const inv = detectInventoryWindow(vw, vh, fullImg.data);
+    state.detectedInvRect = inv;
+    $('invStatusTag').textContent = inv ? 'Inv: Open (Synced)' : 'Inv: Closed';
 
-    // 1. Render raw zoomed color crop so user can verify box placement visually
-    rawCanvas.width = sw * scale;
-    rawCanvas.height = sh * scale;
-    const rCtx = rawCanvas.getContext('2d', { willReadFrequently: true });
-    rCtx.imageSmoothingEnabled = false;
-    rCtx.drawImage(video, sx, sy, sw, sh, 0, 0, rawCanvas.width, rawCanvas.height);
+    // 3. Draw live preview + green/blue detection overlays
+    overlayCanvas.width = vw;
+    overlayCanvas.height = vh;
+    oCtx.drawImage(workCanvas, 0, 0);
 
-    // 2. Render thresholded black-on-white image for Tesseract
-    targetCanvas.width = sw * scale + pad * 2;
-    targetCanvas.height = sh * scale + pad * 2;
+    // EXP Box Overlay
+    oCtx.strokeStyle = '#4f8cff';
+    oCtx.lineWidth = 2;
+    oCtx.strokeRect(hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h);
 
-    const ctx = targetCanvas.getContext('2d', { willReadFrequently: true });
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
+    // Quickslot Grid Overlay
+    oCtx.strokeStyle = '#22c55e';
+    oCtx.lineWidth = 2;
+    oCtx.strokeRect(hud.qsRect.x, hud.qsRect.y, hud.qsRect.w, hud.qsRect.h);
 
-    const img = rCtx.getImageData(0, 0, rawCanvas.width, rawCanvas.height);
-    const d = img.data;
-
-    if (filterMode === 'whiteText') {
-      // MapleStory white HUD text has high brightness across all RGB channels
-      for (let i = 0; i < d.length; i += 4) {
-        const sum = d[i] + d[i + 1] + d[i + 2];
-        const isWhiteDigit = sum > 510; // avg > 170 per channel
-        const val = isWhiteDigit ? 0 : 255;
-        d[i] = d[i + 1] = d[i + 2] = val;
-      }
-    } else {
-      // Inventory Meso: dark text on light grey box
-      for (let i = 0; i < d.length; i += 4) {
-        const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-        const val = lum < 125 ? 0 : 255;
-        d[i] = d[i + 1] = d[i + 2] = val;
-      }
+    // Inventory Meso Overlay (if open)
+    if (inv) {
+      oCtx.strokeStyle = '#f59e0b';
+      oCtx.lineWidth = 2;
+      oCtx.strokeRect(inv.winX, inv.winY, inv.winW, inv.winH);
+      oCtx.strokeRect(inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h);
     }
 
-    const tmp = document.createElement('canvas');
-    tmp.width = rawCanvas.width;
-    tmp.height = rawCanvas.height;
-    tmp.getContext('2d').putImageData(img, 0, 0);
-    ctx.drawImage(tmp, pad, pad);
-    return true;
-  }
+    // 4. Read EXP Bar via Bitmap Reader
+    const expCrop = $('cropExp');
+    expCrop.width = hud.expRect.w;
+    expCrop.height = hud.expRect.h;
+    expCrop.getContext('2d').drawImage(
+      workCanvas,
+      hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h,
+      0, 0, hud.expRect.w, hud.expRect.h
+    );
+    const expData = wCtx.getImageData(hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h);
+    const rawExpStr = readMapleBitmapText(expData, 'white');
 
-  // --- OCR Scanning & Anti-Glitch Sanity Filters ---
-  async function runOcrPass() {
-    if (isScanning || !ocrWorker) return;
-    isScanning = true;
+    const expMatch = rawExpStr.match(/([\d,]+)\s*[\[\(]?\s*(\d{1,2}\.\d{1,2})%?/);
+    if (expMatch) {
+      const parsedExp = parseInt(expMatch[1].replace(/,/g, ''), 10);
+      const parsedPct = parseFloat(expMatch[2]);
+      $('readExp').textContent = `${fmtNum(parsedExp)} [${parsedPct.toFixed(2)}%]`;
 
-    try {
-      // 1. EXP Bar
-      if (state.rois.exp && extractPreprocessedCanvas(state.rois.exp, $('rawExp'), $('cvsExp'), 'whiteText')) {
-        const { data: { text } } = await ocrWorker.recognize($('cvsExp'));
-        const clean = text.trim();
-        const expMatch = clean.match(/([\d,]+)\s*[\[\(]?\s*(\d{1,2}\.\d{1,2})%?/);
-        if (expMatch) {
-          const parsedExp = parseInt(expMatch[1].replace(/,/g, ''), 10);
-          const parsedPct = parseFloat(expMatch[2]);
-          $('readExp').textContent = `${fmtNum(parsedExp)} (${parsedPct.toFixed(2)}%)`;
-
-          if (state.mode === 'grinding') {
-            if (state.startExp === null) {
-              state.startExp = parsedExp;
-              state.currentExp = parsedExp;
-              state.currentPct = parsedPct;
-            } else {
-              const delta = parsedExp - state.currentExp;
-              if (delta >= 0 && delta < 10_000_000) {
-                state.expGained += delta;
-                state.currentExp = parsedExp;
-                state.currentPct = parsedPct;
-              }
-            }
-          }
+      if (state.mode === 'grinding') {
+        if (state.startExp === null) {
+          state.startExp = parsedExp;
+          state.currentExp = parsedExp;
+          state.currentPct = parsedPct;
         } else {
-          $('readExp').textContent = `Raw: "${clean || 'none'}"`;
-        }
-      }
-
-      // 2. Inventory Mesos
-      if (state.rois.meso && extractPreprocessedCanvas(state.rois.meso, $('rawMeso'), $('cvsMeso'), 'auto')) {
-        const { data: { text } } = await ocrWorker.recognize($('cvsMeso'));
-        const digits = text.replace(/[^\d]/g, '');
-        if (digits.length > 0) {
-          const parsedMeso = parseInt(digits, 10);
-          $('readMeso').textContent = fmtNum(parsedMeso);
-
-          if (state.mode === 'grinding' || state.mode === 'npc') {
-            if (state.lastMeso === null) {
-              state.lastMeso = parsedMeso;
-            } else {
-              const diff = parsedMeso - state.lastMeso;
-              if (diff > 0 && diff < 50_000_000) {
-                state.grossMesoGained += diff;
-              }
-              state.lastMeso = parsedMeso;
-            }
+          const delta = parsedExp - state.currentExp;
+          if (delta >= 0 && delta < 15_000_000) {
+            state.expGained += delta;
+            state.currentExp = parsedExp;
+            state.currentPct = parsedPct;
           }
-        } else {
-          $('readMeso').textContent = `Raw: "${text.trim() || 'none'}"`;
         }
       }
-
-      // 3. Potion Slots
-      if (state.rois.pot1 && extractPreprocessedCanvas(state.rois.pot1, $('rawPot1'), $('cvsPot1'), 'whiteText')) {
-        const { data: { text } } = await ocrWorker.recognize($('cvsPot1'));
-        const digits = text.replace(/[^\d]/g, '');
-        if (digits.length > 0) {
-          const count = parseInt(digits, 10);
-          $('readPot1').textContent = count;
-          if (state.mode === 'grinding') {
-            if (state.lastPot1 !== null && count < state.lastPot1 && (state.lastPot1 - count) <= 25) {
-              state.pot1Used += (state.lastPot1 - count);
-            }
-            state.lastPot1 = count;
-          }
-        } else {
-          $('readPot1').textContent = `Raw: "${text.trim() || 'none'}"`;
-        }
-      }
-
-      if (state.rois.pot2 && extractPreprocessedCanvas(state.rois.pot2, $('rawPot2'), $('cvsPot2'), 'whiteText')) {
-        const { data: { text } } = await ocrWorker.recognize($('cvsPot2'));
-        const digits = text.replace(/[^\d]/g, '');
-        if (digits.length > 0) {
-          const count = parseInt(digits, 10);
-          $('readPot2').textContent = count;
-          if (state.mode === 'grinding') {
-            if (state.lastPot2 !== null && count < state.lastPot2 && (state.lastPot2 - count) <= 25) {
-              state.pot2Used += (state.lastPot2 - count);
-            }
-            state.lastPot2 = count;
-          }
-        } else {
-          $('readPot2').textContent = `Raw: "${text.trim() || 'none'}"`;
-        }
-      }
-
-      updateUI();
-    } finally {
-      isScanning = false;
+    } else if (rawExpStr) {
+      $('readExp').textContent = `Detected: "${rawExpStr}"`;
     }
-  }
 
-  // --- Manual Adjustments ---
-  $('btnAddMeso').addEventListener('click', () => {
-    const val = parseInt($('manualMesoInput').value, 10);
-    if (!isNaN(val)) {
-      state.grossMesoGained += val;
-      $('manualMesoInput').value = '';
-      updateUI();
-    }
-  });
+    // 5. Read Inventory Mesos if Inventory window is open
+    if (inv) {
+      const mesoCrop = $('cropMeso');
+      mesoCrop.width = inv.mesoRect.w;
+      mesoCrop.height = inv.mesoRect.h;
+      mesoCrop.getContext('2d').drawImage(
+        workCanvas,
+        inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h,
+        0, 0, inv.mesoRect.w, inv.mesoRect.h
+      );
+      const mesoData = wCtx.getImageData(inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h);
+      const rawMesoStr = readMapleBitmapText(mesoData, 'dark');
+      const digits = rawMesoStr.replace(/[^\d]/g, '');
 
-  $('btnAddHp').addEventListener('click', () => {
-    const val = parseInt($('manualHpInput').value, 10);
-    if (!isNaN(val)) {
-      state.pot1Used += val;
-      $('manualHpInput').value = '';
-      updateUI();
-    }
-  });
+      if (digits.length > 0) {
+        const parsedMeso = parseInt(digits, 10);
+        $('readMeso').textContent = `${fmtNum(parsedMeso)} mesos`;
 
-  // --- Render Live KPIs ---
-  function updateUI() {
-    $('expClock').textContent = fmtTime(state.expSeconds);
-    $('mesoClock').textContent = fmtTime(state.mesoSeconds);
-
-    const expHrs = state.expSeconds / 3600;
-    const expPerHr = expHrs > 0 ? state.expGained / expHrs : 0;
-    $('kpiExpHr').textContent = fmtNum(expPerHr);
-    $('kpiExpSub').textContent = `Session: +${fmtNum(state.expGained)} EXP`;
-    $('currentPct').textContent = `${state.currentPct.toFixed(2)}%`;
-    $('kpiCurrentExp').textContent = `Current: ${fmtNum(state.currentExp || 0)} EXP`;
-
-    let ttlStr = '--:--';
-    if (expPerHr > 0 && state.currentExp > 0 && state.currentPct > 0 && state.currentPct < 100) {
-      const totalLevelExp = state.currentExp / (state.currentPct / 100);
-      const remainingExp = Math.max(0, totalLevelExp - state.currentExp);
-      const minsLeft = Math.round((remainingExp / expPerHr) * 60);
-      const h = Math.floor(minsLeft / 60);
-      const m = minsLeft % 60;
-      ttlStr = `${h}h ${m}m`;
-    }
-    $('kpiTtl').textContent = ttlStr;
-
-    const hpCost = parseFloat($('hpCost').value) || 0;
-    const mpCost = parseFloat($('mpCost').value) || 0;
-    const potBurn = (state.pot1Used * hpCost) + (state.pot2Used * mpCost);
-    const netProfit = state.grossMesoGained - potBurn;
-
-    const mesoHrs = state.mesoSeconds / 3600;
-    const netPerHr = mesoHrs > 0 ? netProfit / mesoHrs : 0;
-
-    const netEl = $('kpiNetHr');
-    netEl.textContent = (netPerHr >= 0 ? '+' : '') + fmtNum(netPerHr);
-    netEl.className = 'kpi-value ' + (netPerHr >= 0 ? 'val-green' : 'val-red');
-
-    $('kpiNetSub').textContent = `Net Session: ${(netProfit >= 0 ? '+' : '') + fmtNum(netProfit)} mesos`;
-    $('kpiGrossMeso').textContent = `+${fmtNum(state.grossMesoGained)}`;
-    $('kpiPotBurn').textContent = `Pot Burn: -${fmtNum(potBurn)} (${state.pot1Used + state.pot2Used} pots)`;
-
-    if (pipWindow && !pipWindow.closed) {
-      const pDoc = pipWindow.document;
-      const pStatus = pDoc.getElementById('pipStatus');
-      if (pStatus) {
-        pStatus.className = 'pill ' + state.mode;
-        pStatus.textContent = state.mode === 'grinding' ? 'Grinding' : state.mode === 'npc' ? 'NPC Sell' : state.mode === 'paused' ? 'Paused' : 'Idle';
-        pDoc.getElementById('pipClock').textContent = fmtTime(state.mode === 'npc' ? state.mesoSeconds : state.expSeconds);
-        pDoc.getElementById('pipTtl').textContent = ttlStr;
-        pDoc.getElementById('pipExp').textContent = fmtCompact(expPerHr);
-        pDoc.getElementById('pipPct').textContent = `${state.currentPct.toFixed(1)}%`;
-
-        const pNet = pDoc.getElementById('pipNet');
-        pNet.textContent = (netPerHr >= 0 ? '+' : '') + fmtCompact(netPerHr);
-        pNet.className = 'val ' + (netPerHr >= 0 ? 'green' : 'red');
-      }
-    }
-  }
-
-  // --- Save Session, JSON Backup/Restore & CSV Export ---
-  $('btnSaveSession').addEventListener('click', () => {
-    const mapName = prompt('Enter Map Name (e.g., Coolie Zombies, Wolf Spiders, Himes):', 'Grind Session');
-    if (!mapName) return;
-
-    const hpCost = parseFloat($('hpCost').value) || 0;
-    const mpCost = parseFloat($('mpCost').value) || 0;
-    const potBurn = (state.pot1Used * hpCost) + (state.pot2Used * mpCost);
-    const netProfit = state.grossMesoGained - potBurn;
-
-    const expHrs = Math.max(1 / 3600, state.expSeconds / 3600);
-    const mesoHrs = Math.max(1 / 3600, state.mesoSeconds / 3600);
-
-    state.logs.unshift({
-      date: new Date().toLocaleDateString(),
-      map: mapName,
-      duration: fmtTime(state.expSeconds),
-      expHr: Math.round(state.expGained / expHrs),
-      grossMeso: state.grossMesoGained,
-      potBurn: Math.round(potBurn),
-      netHr: Math.round(netProfit / mesoHrs)
-    });
-
-    localStorage.setItem('ms_logs', JSON.stringify(state.logs));
-    renderLogs();
-
-    Object.assign(state, {
-      expSeconds: 0, mesoSeconds: 0,
-      startExp: null, expGained: 0,
-      lastMeso: null, grossMesoGained: 0,
-      lastPot1: null, pot1Used: 0,
-      lastPot2: null, pot2Used: 0
-    });
-    updateUI();
-  });
-
-  function renderLogs() {
-    const tbody = $('logTableBody');
-    if (!state.logs.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No saved sessions yet. Click "Save & Reset" after a grind!</td></tr>';
-      return;
-    }
-    tbody.innerHTML = state.logs.map(l => `
-      <tr>
-        <td><strong>${l.map}</strong><br><span style="font-size:0.75rem;color:var(--muted)">${l.date}</span></td>
-        <td>${l.duration}</td>
-        <td class="val-blue"><strong>${fmtNum(l.expHr)}</strong></td>
-        <td>+${fmtNum(l.grossMeso)}</td>
-        <td class="val-red">-${fmtNum(l.potBurn)}</td>
-        <td class="${l.netHr >= 0 ? 'val-green' : 'val-red'}"><strong>${fmtNum(l.netHr)}</strong></td>
-      </tr>
-    `).join('');
-  }
-  renderLogs();
-
-  $('btnExportJson').addEventListener('click', () => {
-    const backup = {
-      exportedAt: new Date().toISOString(),
-      rois: state.rois,
-      potions: {
-        hpName: $('hpName').value,
-        hpCost: $('hpCost').value,
-        mpName: $('mpName').value,
-        mpCost: $('mpCost').value
-      },
-      logs: state.logs
-    };
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `maple-tracker-backup-${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-  });
-
-  $('btnImportJson').addEventListener('click', () => $('fileImportJson').click());
-  $('fileImportJson').addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        if (data.rois) {
-          state.rois = data.rois;
-          localStorage.setItem('ms_rois', JSON.stringify(state.rois));
-          renderRoiBoxes();
-        }
-        if (data.potions) {
-          for (const [k, v] of Object.entries(data.potions)) {
-            localStorage.setItem('ms_' + k, v);
-          }
-          loadPotionInputs();
-        }
-        if (Array.isArray(data.logs)) {
-          state.logs = data.logs;
-          localStorage.setItem('ms_logs', JSON.stringify(state.logs));
-          renderLogs();
-        }
-        updateUI();
-        alert('Backup restored successfully!');
-      } catch {
-        alert('Invalid JSON backup file.');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  });
-
-  $('btnExportCsv').addEventListener('click', () => {
-    if (!state.logs.length) return;
-    const header = 'Date,Map,Grind Duration,EXP/hr,Gross Mesos,Pot Burn,Net Profit/hr\n';
-    const rows = state.logs.map(l =>
-      `"${l.date}","${l.map}","${l.duration}",${l.expHr},${l.grossMeso},${l.potBurn},${l.netHr}`
-    ).join('\n');
-    const blob = new Blob([header + rows], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `maple-grind-logs-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-  });
-})();
-</script>
-</body>
-</html>
+        if (state.mode === 'grinding' || state.mode === 'npc') {
+          if (state.lastMeso === null) {
+            state.lastMeso = parsedMeso;
+          } else {
