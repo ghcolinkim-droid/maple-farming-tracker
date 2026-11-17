@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MapleStory Classic — Auto-Detect EXP & Profit Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     :root {
       --bg: #0f1117;
@@ -78,6 +79,7 @@
     button.red { background: rgba(239, 68, 68, 0.15); border-color: var(--red); color: var(--red); }
     button.purple { background: rgba(168, 85, 247, 0.15); border-color: var(--purple); color: #d8b4fe; }
     button.sm { padding: 4px 9px; font-size: 0.78rem; }
+    button.active-tool { outline: 2px solid #fff; }
 
     .kpi-grid {
       display: grid;
@@ -197,7 +199,7 @@
     .s-lbl { font-size: 0.76rem; color: var(--muted); }
     .s-val { font-family: monospace; font-weight: 700; font-size: 0.92rem; color: var(--text); }
 
-    /* Quickslot Grid (Always 4 columns: 1x4, 4x2, or 4x3) */
+    /* Quickslot Potions Grid (4x3 12-Slot Layout matching Maple Track) */
     .qs-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -211,44 +213,66 @@
       background: var(--panel-alt);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 9px 10px;
+      padding: 11px 12px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 7px;
     }
     .qs-card.tracked {
       border-color: var(--accent);
-      background: rgba(79, 140, 255, 0.08);
+      background: rgba(79, 140, 255, 0.07);
     }
     .qs-top {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      gap: 6px;
+      gap: 8px;
     }
     .qs-top canvas {
-      width: 34px;
-      height: 34px;
+      width: 38px;
+      height: 38px;
       border: 1px solid var(--border);
-      border-radius: 4px;
+      border-radius: 5px;
       image-rendering: pixelated;
       background: #000;
     }
-    .qs-count {
-      font-family: monospace;
-      font-weight: 800;
-      font-size: 0.98rem;
-    }
-    .qs-meta {
-      font-size: 0.72rem;
+    .qs-title {
+      font-size: 0.78rem;
       color: var(--muted);
+      font-weight: 600;
+    }
+    .qs-rem {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px;
+    }
+    .qs-rem.untracked {
+      font-size: 0.95rem;
+      color: var(--text);
+    }
+    .qs-sub {
+      font-size: 0.73rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .pill-tag {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 5px;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      letter-spacing: 0.04em;
     }
     select, input {
       background: var(--bg);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 5px 7px;
-      border-radius: 5px;
+      padding: 6px 8px;
+      border-radius: 6px;
       font-size: 0.8rem;
       width: 100%;
     }
@@ -329,8 +353,10 @@
       <div class="card-head">
         <h2>Automatic HUD & Inventory Detection</h2>
         <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-          <span id="detectedRes" style="font-size:0.78rem; color:var(--muted);">Client: Not detected</span>
-          <button id="btnRescan" class="sm green">🔍 Rescan HUD & Inventory</button>
+          <span id="detectedRes" style="font-size:0.78rem; color:var(--muted);">OCR Engine: Loading...</span>
+          <button id="btnDrawExp" class="sm">✏️ Drag EXP Box</button>
+          <button id="btnDrawQs" class="sm">✏️ Drag Quickslots</button>
+          <button id="btnRescan" class="sm green">🔍 Rescan Now</button>
         </div>
       </div>
 
@@ -381,23 +407,33 @@
         <button class="sm" data-nudge="qs:dy:-1">↑ Y</button>
         <button class="sm" data-nudge="qs:dy:1">Y ↓</button>
 
-        <button class="sm" id="btnResetHudOffset" style="margin-left:auto;">Reset Offsets</button>
+        <button class="sm" id="btnResetHudOffset" style="margin-left:auto;">Reset Calibration</button>
       </div>
     </div>
 
-    <!-- Quickslot Potions Card -->
+    <!-- Quickslot Potions Card (Matching Maple Track 12-Slot Panel) -->
     <div class="card">
       <div class="card-head">
         <div>
-          <h2>Quickslot Potions</h2>
+          <h2>Quickslot potions</h2>
           <p style="font-size:0.78rem; color:var(--muted); margin-top:2px;">
-            Defaults to your <strong>1, 2, 3, 4</strong> top quickslot row (toggleable to 8 or 12 slots). Leave skills/empty slots as <strong>Not tracked</strong>.
+            The tracker finds your 8- or 12-slot panel automatically. Choose a potion type for each slot you want to track; leave skills and empty slots as <strong>Not tracked</strong>.
           </p>
         </div>
-        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-          <button id="btnToggleSlots" class="sm">Layout: 4 Slots (1–4 Top Row)</button>
-          <button id="btnResetPotUsage" class="sm amber">Reset Potion Usage</button>
-        </div>
+        <span id="slotsDetectedPill" class="pill-tag">12 SLOTS DETECTED</span>
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:6px;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; cursor:pointer;">
+          <input type="checkbox" id="chkTrackPots" checked style="width:auto;" />
+          <span>Track potion counts</span>
+        </label>
+        <button id="btnRescanQs" class="sm">Rescan quickslots</button>
+        <button id="btnResetPotUsage" class="sm">Reset potion usage</button>
+        <button id="btnToggleSlots" class="sm" style="margin-left:auto;">Panel: 12 Slots (4×3)</button>
+      </div>
+      <div style="font-size:0.74rem; color:var(--muted); margin-bottom:8px;">
+        Reading selected slots every 2 seconds.
       </div>
 
       <div id="quickslotGrid" class="qs-grid"></div>
@@ -444,6 +480,9 @@
   const workCanvas = document.createElement('canvas');
   const wCtx = workCanvas.getContext('2d', { willReadFrequently: true });
 
+  const scaleCanvas = document.createElement('canvas');
+  const sCtx = scaleCanvas.getContext('2d', { willReadFrequently: true });
+
   function safeLoad(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
@@ -453,7 +492,7 @@
     }
   }
 
-  // --- Preset MapleStory Classic Potions (Classic NPC Prices) ---
+  // --- Preset MapleStory Classic Potions ---
   const POTION_PRESETS = [
     { id: 'none',       name: 'Not tracked',        cost: 0 },
     { id: 'lemon',      name: 'Lemon',              cost: 150 },
@@ -468,150 +507,6 @@
     { id: 'ginger_ale', name: 'Ginger Ale',         cost: 3800 },
     { id: 'custom',     name: 'Custom Price...',    cost: 1000 }
   ];
-
-  // --- MapleStory Classic 5x7 Bitmap Font Templates (EXP & Meso Text) ---
-  const GLYPH_TEMPLATES = {
-    '0': ['01110','10001','10011','10101','11001','10001','01110'],
-    '1': ['00100','01100','00100','00100','00100','00100','01110'],
-    '2': ['01110','10001','00001','00110','01000','10000','11111'],
-    '3': ['01110','10001','00001','00110','00001','10001','01110'],
-    '4': ['00010','00110','01010','10010','11111','00010','00010'],
-    '5': ['11111','10000','11110','00001','00001','10001','01110'],
-    '6': ['01110','10000','11110','10001','10001','10001','01110'],
-    '7': ['11111','00001','00010','00100','01000','01000','01000'],
-    '8': ['01110','10001','10001','01110','10001','10001','01110'],
-    '9': ['01110','10001','10001','01111','00001','00010','01100'],
-    '.': ['0','0','0','0','0','1','1'],
-    ',': ['00','00','00','00','00','01','10'],
-    '%': ['11001','11010','00100','00100','01011','10011','00000'],
-    '[': ['11','10','10','10','10','10','11'],
-    ']': ['11','01','01','01','01','01','11']
-  };
-
-  // --- MapleStory Classic Quickslot Outlined Stack Count Templates (7x10 Black Outline on White Slot) ---
-  // Matches exact 1px black drop-shadow/outline digits shown in quickslot bottom-left (e.g., 71, 769, 159, 44)
-  const QS_OUTLINE_TEMPLATES = {
-    '0': [
-      '0111110',
-      '1100011',
-      '1011101',
-      '1010101',
-      '1010101',
-      '1010101',
-      '1010101',
-      '1011101',
-      '1100011',
-      '0111110'
-    ],
-    '1': [
-      '0011100',
-      '0110100',
-      '1100100',
-      '1010100',
-      '1110100',
-      '0010100',
-      '0010100',
-      '0010100',
-      '0010100',
-      '0011100'
-    ],
-    '2': [
-      '0111110',
-      '1100011',
-      '1011101',
-      '1110101',
-      '0011011',
-      '0110110',
-      '1101100',
-      '1011111',
-      '1000001',
-      '1111111'
-    ],
-    '3': [
-      '0111110',
-      '1100011',
-      '1011101',
-      '1110101',
-      '0011011',
-      '0011011',
-      '1110101',
-      '1011101',
-      '1100011',
-      '0111110'
-    ],
-    '4': [
-      '0001110',
-      '0011010',
-      '0110010',
-      '1101010',
-      '1011010',
-      '1000001',
-      '1111011',
-      '0001010',
-      '0001010',
-      '0001110'
-    ],
-    '5': [
-      '1111111',
-      '1000001',
-      '1011111',
-      '1000010',
-      '1111101',
-      '0000101',
-      '1110101',
-      '1011101',
-      '1100011',
-      '0111110'
-    ],
-    '6': [
-      '0111110',
-      '1100011',
-      '1011101',
-      '1011110',
-      '1000010',
-      '1011101',
-      '1010101',
-      '1011101',
-      '1100011',
-      '0111110'
-    ],
-    '7': [
-      '1111111',
-      '1000001',
-      '1011101',
-      '1110110',
-      '0011010',
-      '0110100',
-      '0101100',
-      '0101000',
-      '0101000',
-      '0111000'
-    ],
-    '8': [
-      '0111110',
-      '1100011',
-      '1011101',
-      '1101011',
-      '0110110',
-      '1101011',
-      '1010101',
-      '1011101',
-      '1100011',
-      '0111110'
-    ],
-    '9': [
-      '0111110',
-      '1100011',
-      '1011101',
-      '1010101',
-      '1011101',
-      '1100001',
-      '0111101',
-      '1011101',
-      '1100011',
-      '0111110'
-    ]
-  };
 
   // --- App State ---
   const state = {
@@ -628,20 +523,28 @@
     grossMesoGained: 0,
     manualMesoOffset: 0,
 
-    slotCount: safeLoad('ms_slotCount_v2', 4),
-    slotConfig: safeLoad('ms_slotConfig', {}),
+    trackPots: true,
+    slotCount: safeLoad('ms_slotCount_v3', 12), // Defaults to 12-slot 4x3 panel (like image_97bb81.png)
+    slotConfig: safeLoad('ms_slotConfig_v2', {}),
     slotLive: {},
 
-    offsets: safeLoad('ms_offsets_v3', {
+    offsets: safeLoad('ms_offsets_v5', {
       exp: { dx: 0, dy: 0 },
       qs:  { dx: 0, dy: 0 }
     }),
-    detectedAnchor: null,
-    detectedInvRect: null,
+    customNorm: safeLoad('ms_customNorm_v1', {
+      exp: null,
+      qs:  null
+    }),
+    drawTarget: null,
+    dragStart: null,
+    dragCurrent: null,
 
     logs: safeLoad('ms_logs', [])
   };
 
+  let ocrWorker = null;
+  let ocrBusy = false;
   let timerWorker = null;
   let pipWindow = null;
 
@@ -660,6 +563,134 @@
     return `${h}:${m}:${s}`;
   };
 
+  // --- Initialize Whitelisted Tesseract Worker ---
+  async function initOcr() {
+    try {
+      ocrWorker = await Tesseract.createWorker('eng');
+      await ocrWorker.setParameters({
+        tessedit_char_whitelist: '0123456789.,[]%',
+        tessedit_pageseg_mode: '7'
+      });
+      $('detectedRes').textContent = 'OCR Engine: Ready';
+    } catch (e) {
+      $('detectedRes').textContent = 'OCR Engine: Error';
+      console.error(e);
+    }
+  }
+  initOcr();
+
+  // --- Quickslot White-Core-With-Black-Outline Extractor ---
+  // Isolates ONLY the white interior pixels of the outlined stack numbers (71, 769, 159, 44)
+  // while completely erasing both the white slot background and dark potion art!
+  async function readQuickslotDigits(srcCanvas, sx, sy, sw, sh) {
+    if (!ocrWorker || sw <= 2 || sh <= 2) return '';
+
+    const rawCtx = workCanvas.getContext('2d');
+    const img = rawCtx.getImageData(sx, sy, sw, sh);
+    const d = img.data;
+    const mask = new Uint8Array(sw * sh);
+
+    const isBlackOutline = (x, y) => {
+      if (x < 0 || y < 0 || x >= sw || y >= sh) return false;
+      const i = (y * sw + x) * 4;
+      return d[i] < 65 && d[i + 1] < 65 && d[i + 2] < 65;
+    };
+
+    // Keep white digit core pixels that touch a black outline pixel within 1-2px
+    for (let y = 0; y < sh; y++) {
+      for (let x = 0; x < sw; x++) {
+        const i = (y * sw + x) * 4;
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        const isWhiteFill = (r > 205 && g > 205 && b > 205);
+        if (!isWhiteFill) continue;
+
+        let touchesOutline = false;
+        for (let dy = -2; dy <= 2 && !touchesOutline; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            if (isBlackOutline(x + dx, y + dy)) {
+              touchesOutline = true;
+              break;
+            }
+          }
+        }
+        if (touchesOutline) {
+          mask[y * sw + x] = 1;
+        }
+      }
+    }
+
+    // Write 1x mask to a tiny temp canvas, then 4x nearest-neighbor upscale with white padding
+    const tmp = document.createElement('canvas');
+    tmp.width = sw;
+    tmp.height = sh;
+    const tCtx = tmp.getContext('2d');
+    const tImg = tCtx.createImageData(sw, sh);
+    for (let p = 0; p < sw * sh; p++) {
+      const v = mask[p] ? 0 : 255;
+      tImg.data[p * 4] = v;
+      tImg.data[p * 4 + 1] = v;
+      tImg.data[p * 4 + 2] = v;
+      tImg.data[p * 4 + 3] = 255;
+    }
+    tCtx.putImageData(tImg, 0, 0);
+
+    const scale = 4;
+    const pad = 12;
+    scaleCanvas.width = sw * scale + pad * 2;
+    scaleCanvas.height = sh * scale + pad * 2;
+    sCtx.fillStyle = '#ffffff';
+    sCtx.fillRect(0, 0, scaleCanvas.width, scaleCanvas.height);
+    sCtx.imageSmoothingEnabled = false;
+    sCtx.drawImage(tmp, 0, 0, sw, sh, pad, pad, sw * scale, sh * scale);
+
+    const { data: { text } } = await ocrWorker.recognize(scaleCanvas);
+    return (text || '').replace(/[^\d]/g, '');
+  }
+
+  // --- 3x Upscaled + Binarized OCR Reader (EXP & Inventory Mesos) ---
+  async function readUpscaledDigits(srcCanvas, sx, sy, sw, sh, mode = 'white-on-dark') {
+    if (!ocrWorker || sw <= 2 || sh <= 2) return '';
+
+    const scale = 3;
+    const pad = 10;
+    const uw = Math.round(sw * scale);
+    const uh = Math.round(sh * scale);
+    scaleCanvas.width = uw + pad * 2;
+    scaleCanvas.height = uh + pad * 2;
+
+    sCtx.fillStyle = '#ffffff';
+    sCtx.fillRect(0, 0, scaleCanvas.width, scaleCanvas.height);
+    sCtx.imageSmoothingEnabled = false;
+    sCtx.drawImage(srcCanvas, sx, sy, sw, sh, pad, pad, uw, uh);
+
+    const img = sCtx.getImageData(pad, pad, uw, uh);
+    const d = img.data;
+
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      let isInk = false;
+
+      if (mode === 'white-on-dark') {
+        const minC = Math.min(r, g, b);
+        const maxC = Math.max(r, g, b);
+        isInk = (minC > 180 && (maxC - minC) < 42);
+      } else {
+        const lum = r * 0.299 + g * 0.587 + b * 0.114;
+        isInk = lum < 155;
+      }
+
+      const v = isInk ? 0 : 255;
+      d[i] = v;
+      d[i + 1] = v;
+      d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+
+    sCtx.putImageData(img, pad, pad);
+    const { data: { text } } = await ocrWorker.recognize(scaleCanvas);
+    return (text || '').trim();
+  }
+
   // --- Tabs ---
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -670,37 +701,91 @@
     });
   });
 
+  // --- Drag-to-Calibrate on Preview Canvas ---
+  $('btnDrawExp').addEventListener('click', () => {
+    state.drawTarget = state.drawTarget === 'exp' ? null : 'exp';
+    $('btnDrawExp').classList.toggle('active-tool', state.drawTarget === 'exp');
+    $('btnDrawQs').classList.remove('active-tool');
+    overlayCanvas.style.cursor = state.drawTarget ? 'crosshair' : 'default';
+  });
+
+  $('btnDrawQs').addEventListener('click', () => {
+    state.drawTarget = state.drawTarget === 'qs' ? null : 'qs';
+    $('btnDrawQs').classList.toggle('active-tool', state.drawTarget === 'qs');
+    $('btnDrawExp').classList.remove('active-tool');
+    overlayCanvas.style.cursor = state.drawTarget ? 'crosshair' : 'default';
+  });
+
+  function getNormPos(e) {
+    const rect = overlayCanvas.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
+    };
+  }
+
+  overlayCanvas.addEventListener('mousedown', e => {
+    if (!state.drawTarget) return;
+    state.dragStart = getNormPos(e);
+    state.dragCurrent = state.dragStart;
+  });
+
+  overlayCanvas.addEventListener('mousemove', e => {
+    if (!state.dragStart) return;
+    state.dragCurrent = getNormPos(e);
+  });
+
+  overlayCanvas.addEventListener('mouseup', () => {
+    if (!state.dragStart || !state.dragCurrent) return;
+    const x = Math.min(state.dragStart.x, state.dragCurrent.x);
+    const y = Math.min(state.dragStart.y, state.dragCurrent.y);
+    const w = Math.abs(state.dragCurrent.x - state.dragStart.x);
+    const h = Math.abs(state.dragCurrent.y - state.dragStart.y);
+
+    if (w > 0.01 && h > 0.008) {
+      state.customNorm[state.drawTarget] = { x, y, w, h };
+      localStorage.setItem('ms_customNorm_v1', JSON.stringify(state.customNorm));
+    }
+    state.dragStart = null;
+    state.dragCurrent = null;
+    state.drawTarget = null;
+    $('btnDrawExp').classList.remove('active-tool');
+    $('btnDrawQs').classList.remove('active-tool');
+    overlayCanvas.style.cursor = 'default';
+    scanFrame();
+  });
+
   // --- Independent EXP & Quickslot Fine-Tune Nudge ---
   document.querySelectorAll('[data-nudge]').forEach(btn => {
     btn.addEventListener('click', () => {
       const [target, axis, valStr] = btn.dataset.nudge.split(':');
       state.offsets[target][axis] += parseInt(valStr, 10);
-      localStorage.setItem('ms_offsets_v3', JSON.stringify(state.offsets));
+      localStorage.setItem('ms_offsets_v5', JSON.stringify(state.offsets));
       scanFrame();
     });
   });
 
   $('btnResetHudOffset').addEventListener('click', () => {
     state.offsets = { exp: { dx: 0, dy: 0 }, qs: { dx: 0, dy: 0 } };
-    localStorage.setItem('ms_offsets_v3', JSON.stringify(state.offsets));
+    state.customNorm = { exp: null, qs: null };
+    localStorage.setItem('ms_offsets_v5', JSON.stringify(state.offsets));
+    localStorage.setItem('ms_customNorm_v1', JSON.stringify(state.customNorm));
     scanFrame();
   });
 
-  // --- Cycle 4 (1x4 Top Row 1-4) -> 8 (4x2) -> 12 (4x3) Quickslots ---
+  $('chkTrackPots').addEventListener('change', e => {
+    state.trackPots = e.target.checked;
+  });
+
   function updateSlotToggleLabel() {
-    if (state.slotCount === 4) {
-      $('btnToggleSlots').textContent = 'Layout: 4 Slots (1–4 Top Row)';
-    } else if (state.slotCount === 8) {
-      $('btnToggleSlots').textContent = 'Layout: 8 Slots (4×2)';
-    } else {
-      $('btnToggleSlots').textContent = 'Layout: 12 Slots (4×3)';
-    }
+    $('slotsDetectedPill').textContent = `${state.slotCount} SLOTS DETECTED`;
+    $('btnToggleSlots').textContent = state.slotCount === 12 ? 'Panel: 12 Slots (4×3)' : 'Panel: 8 Slots (4×2)';
   }
   updateSlotToggleLabel();
 
   $('btnToggleSlots').addEventListener('click', () => {
-    state.slotCount = state.slotCount === 4 ? 8 : state.slotCount === 8 ? 12 : 4;
-    localStorage.setItem('ms_slotCount_v2', JSON.stringify(state.slotCount));
+    state.slotCount = state.slotCount === 12 ? 8 : 12;
+    localStorage.setItem('ms_slotCount_v3', JSON.stringify(state.slotCount));
     updateSlotToggleLabel();
     renderQuickslotCards();
     scanFrame();
@@ -709,49 +794,57 @@
   $('btnResetPotUsage').addEventListener('click', () => {
     for (const k of Object.keys(state.slotLive)) {
       state.slotLive[k].used = 0;
+      state.slotLive[k].restocked = 0;
       state.slotLive[k].lastCount = state.slotLive[k].count;
     }
     updateUI();
     renderQuickslotCards();
   });
 
-  // --- Build Quickslot UI Cards ---
+  // --- Build Quickslot UI Cards (Exact Maple Track 4x3 Card Design from image_97bb81.png) ---
   function renderQuickslotCards() {
     const grid = $('quickslotGrid');
     grid.className = 'qs-grid';
     grid.innerHTML = '';
 
-    const keyLabels4  = ['1 / Q', '2 / W', '3 / E', '4 / R'];
-    const keyLabels8  = ['Shift', 'Ins', 'Home', 'PgUp', 'Ctrl', 'Del', 'End', 'PgDn'];
-    const keyLabels12 = ['1 / Q', '2 / W', '3 / E', '4 / R', 'Shift', 'Ins', 'Home', 'PgUp', 'Ctrl', 'Del', 'End', 'PgDn'];
-    const labels = state.slotCount === 4 ? keyLabels4 : state.slotCount === 8 ? keyLabels8 : keyLabels12;
-
     for (let i = 0; i < state.slotCount; i++) {
       const cfgKey = `${state.slotCount}_${i}`;
       const cfg = state.slotConfig[cfgKey] || { preset: 'none', cost: 0 };
-      const live = state.slotLive[i] || { count: null, used: 0 };
+      const live = state.slotLive[i] || { count: null, used: 0, restocked: 0 };
       const isTracked = cfg.preset !== 'none';
 
       const card = document.createElement('div');
       card.className = 'qs-card' + (isTracked ? ' tracked' : '');
 
       const optionsHtml = POTION_PRESETS.map(p =>
-        `<option value="${p.id}" ${cfg.preset === p.id ? 'selected' : ''}>${p.name}${p.cost > 0 && p.id !== 'custom' ? ` (${p.cost}m)` : ''}</option>`
+        `<option value="${p.id}" ${cfg.preset === p.id ? 'selected' : ''}>${p.name}</option>`
       ).join('');
 
       card.innerHTML = `
         <div class="qs-top">
+          <div class="qs-title">Slot ${i + 1}</div>
           <canvas id="qsCvs_${i}" width="32" height="32"></canvas>
-          <div style="text-align:right;">
-            <div class="qs-meta">Slot ${i + 1} (${labels[i]})</div>
-            <div id="qsCnt_${i}" class="qs-count">${live.count !== null ? live.count : '—'}</div>
-          </div>
         </div>
+
         <select id="qsSel_${i}">${optionsHtml}</select>
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
-          <span id="qsUsed_${i}" class="qs-meta">Used: ${live.used}</span>
-          <input id="qsCost_${i}" type="number" min="0" value="${cfg.cost}" style="width:72px; padding:3px 5px; font-size:0.75rem;" title="Mesos per potion" ${!isTracked ? 'disabled' : ''} />
-        </div>
+
+        ${isTracked ? `
+          <div>
+            <div class="qs-sub" style="margin-bottom:3px;">Mesos / item</div>
+            <input id="qsCost_${i}" type="number" min="0" value="${cfg.cost}" />
+            <div class="qs-sub" style="margin-top:3px;">NPC default · edit for your purchase</div>
+          </div>
+          <div>
+            <div id="qsRem_${i}" class="qs-rem">${live.count !== null ? `Remaining ${live.count}` : 'Reading...'}</div>
+            <div id="qsUsed_${i}" class="qs-sub">Used ${live.used} · Restocked ${live.restocked || 0}</div>
+            <div class="qs-sub" style="margin-top:2px;">${live.count !== null ? 'Reading' : 'Waiting'}</div>
+          </div>
+        ` : `
+          <div>
+            <div class="qs-rem untracked">Not tracked</div>
+            <div class="qs-sub">Select potion type</div>
+          </div>
+        `}
       `;
       grid.appendChild(card);
 
@@ -762,237 +855,23 @@
           preset: presetId,
           cost: presetId === 'custom' ? (cfg.cost || 1000) : found.cost
         };
-        localStorage.setItem('ms_slotConfig', JSON.stringify(state.slotConfig));
+        localStorage.setItem('ms_slotConfig_v2', JSON.stringify(state.slotConfig));
         renderQuickslotCards();
         updateUI();
+        scanFrame();
       });
 
-      $(`qsCost_${i}`).addEventListener('input', e => {
-        state.slotConfig[cfgKey].cost = Math.max(0, parseFloat(e.target.value) || 0);
-        localStorage.setItem('ms_slotConfig', JSON.stringify(state.slotConfig));
-        updateUI();
-      });
+      const costInput = $(`qsCost_${i}`);
+      if (costInput) {
+        costInput.addEventListener('input', e => {
+          state.slotConfig[cfgKey].cost = Math.max(0, parseFloat(e.target.value) || 0);
+          localStorage.setItem('ms_slotConfig_v2', JSON.stringify(state.slotConfig));
+          updateUI();
+        });
+      }
     }
   }
   renderQuickslotCards();
-
-  // --- Specialized Quickslot Stack Count Reader (Matches 1px Black Outline on White Slot) ---
-  function readQuickslotStackCount(slotImgData) {
-    const { width: w, height: h, data: d } = slotImgData;
-    // Scan bottom-left digit zone (x: 0..27, y: 19..31)
-    const x0 = 0, x1 = Math.min(w, 28);
-    const y0 = 19, y1 = Math.min(h, 32);
-    const rw = x1 - x0;
-    const rh = y1 - y0;
-
-    // 1. Threshold pure black outline pixels (r < 65 && g < 65 && b < 65)
-    const bin = new Uint8Array(rw * rh);
-    for (let y = 0; y < rh; y++) {
-      for (let x = 0; x < rw; x++) {
-        const idx = ((y0 + y) * w + (x0 + x)) * 4;
-        const r = d[idx], g = d[idx + 1], b = d[idx + 2];
-        bin[y * rw + x] = (r < 65 && g < 65 && b < 65) ? 1 : 0;
-      }
-    }
-
-    // 2. Find vertical span of the outlined digits (must be 8-11px tall)
-    let topY = -1, botY = -1;
-    for (let y = 0; y < rh; y++) {
-      let rowInk = 0;
-      for (let x = 0; x < rw; x++) rowInk += bin[y * rw + x];
-      if (rowInk >= 2) {
-        if (topY === -1) topY = y;
-        botY = y;
-      }
-    }
-    if (topY === -1 || (botY - topY + 1) < 7) return '';
-
-    // 3. Segment contiguous digit blobs horizontally (with 1px shared outline splitting)
-    const blobs = [];
-    let inBlob = false, startX = 0;
-    for (let x = 0; x <= rw; x++) {
-      let colInk = 0;
-      if (x < rw) {
-        for (let y = topY; y <= botY; y++) colInk += bin[y * rw + x];
-      }
-      if (colInk > 0 && !inBlob) {
-        inBlob = true;
-        startX = x;
-      } else if (colInk === 0 && inBlob) {
-        inBlob = false;
-        const bw = x - startX;
-        if (bw >= 3) {
-          // If 2 or 3 digits touch along their 1px black border (e.g. 12-22px wide), split evenly
-          const numDigits = bw >= 17 ? 3 : bw >= 11 ? 2 : 1;
-          const step = bw / numDigits;
-          for (let k = 0; k < numDigits; k++) {
-            blobs.push({
-              x0: Math.round(startX + k * step),
-              x1: Math.round(startX + (k + 1) * step) - 1,
-              y0: topY,
-              y1: botY
-            });
-          }
-        }
-      }
-    }
-
-    // 4. Match each segmented digit against QS_OUTLINE_TEMPLATES
-    let digits = '';
-    for (const b of blobs) {
-      const cw = b.x1 - b.x0 + 1;
-      const ch = b.y1 - b.y0 + 1;
-      if (cw < 3 || ch < 7) continue;
-
-      let bestDigit = '';
-      let bestScore = -1;
-
-      for (const [digitChar, tmpl] of Object.entries(QS_OUTLINE_TEMPLATES)) {
-        const th = tmpl.length;
-        const tw = tmpl[0].length;
-        let matches = 0;
-        const total = th * tw;
-
-        for (let ty = 0; ty < th; ty++) {
-          const sy = b.y0 + Math.min(ch - 1, Math.floor((ty / th) * ch));
-          for (let tx = 0; tx < tw; tx++) {
-            const sx = b.x0 + Math.min(cw - 1, Math.floor((tx / tw) * cw));
-            const actual = bin[sy * rw + sx];
-            const expected = tmpl[ty][tx] === '1' ? 1 : 0;
-            if (actual === expected) matches++;
-          }
-        }
-        const score = matches / total;
-        if (score > bestScore) {
-          bestScore = score;
-          bestDigit = digitChar;
-        }
-      }
-
-      if (bestScore >= 0.62) {
-        digits += bestDigit;
-      }
-    }
-
-    return digits;
-  }
-
-  // --- Bitmap Font Reader (EXP & Meso Text) ---
-  function readMapleBitmapText(imgData, mode = 'white') {
-    const { width: w, height: h, data: d } = imgData;
-    const bin = new Uint8Array(w * h);
-
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = (y * w + x) * 4;
-        const r = d[idx], g = d[idx + 1], b = d[idx + 2];
-        if (mode === 'white') {
-          const minC = Math.min(r, g, b);
-          const maxC = Math.max(r, g, b);
-          bin[y * w + x] = (minC > 175 && (maxC - minC) < 45) ? 1 : 0;
-        } else {
-          const lum = r * 0.299 + g * 0.587 + b * 0.114;
-          bin[y * w + x] = lum < 155 ? 1 : 0;
-        }
-      }
-    }
-
-    let bestRow = -1, maxRowInk = 0;
-    for (let y = 0; y < h; y++) {
-      let rowInk = 0;
-      for (let x = 0; x < w; x++) rowInk += bin[y * w + x];
-      if (rowInk > maxRowInk) {
-        maxRowInk = rowInk;
-        bestRow = y;
-      }
-    }
-    if (bestRow < 0 || maxRowInk === 0) return '';
-
-    let yTop = bestRow, yBot = bestRow;
-    while (yTop > 0 && (bestRow - yTop) < 7) {
-      let ink = 0;
-      for (let x = 0; x < w; x++) ink += bin[(yTop - 1) * w + x];
-      if (ink === 0) break;
-      yTop--;
-    }
-    while (yBot < h - 1 && (yBot - bestRow) < 7) {
-      let ink = 0;
-      for (let x = 0; x < w; x++) ink += bin[(yBot + 1) * w + x];
-      if (ink === 0) break;
-      yBot++;
-    }
-    const glyphH = yBot - yTop + 1;
-    if (glyphH < 4 || glyphH > 13) return '';
-
-    const chars = [];
-    let inChar = false, xStart = 0;
-    for (let x = 0; x <= w; x++) {
-      let colInk = 0;
-      if (x < w) {
-        for (let y = yTop; y <= yBot; y++) colInk += bin[y * w + x];
-      }
-      if (colInk > 0 && !inChar) {
-        inChar = true;
-        xStart = x;
-      } else if (colInk === 0 && inChar) {
-        inChar = false;
-        const charW = x - xStart;
-        if (charW >= 1 && charW <= 9) {
-          chars.push({ x0: xStart, x1: x - 1, y0: yTop, y1: yBot });
-        }
-      }
-    }
-
-    let result = '';
-    let prevX1 = null;
-
-    for (const box of chars) {
-      if (prevX1 !== null && (box.x0 - prevX1) > 5) {
-        result += ' ';
-      }
-      prevX1 = box.x1;
-
-      const cw = box.x1 - box.x0 + 1;
-      const ch = box.y1 - box.y0 + 1;
-
-      if (cw <= 2 && ch <= 4) {
-        result += '.';
-        continue;
-      }
-
-      let bestChar = '';
-      let bestScore = -1;
-
-      for (const [chKey, tmpl] of Object.entries(GLYPH_TEMPLATES)) {
-        const th = tmpl.length;
-        const tw = tmpl[0].length;
-        if (Math.abs(cw - tw) > 2) continue;
-
-        let matches = 0;
-        const total = th * tw;
-        for (let ty = 0; ty < th; ty++) {
-          const sy = box.y0 + Math.min(ch - 1, Math.floor((ty / th) * ch));
-          for (let tx = 0; tx < tw; tx++) {
-            const sx = box.x0 + Math.min(cw - 1, Math.floor((tx / tw) * cw));
-            const actual = bin[sy * w + sx];
-            const expected = tmpl[ty][tx] === '1' ? 1 : 0;
-            if (actual === expected) matches++;
-          }
-        }
-        const score = matches / total;
-        if (score > bestScore) {
-          bestScore = score;
-          bestChar = chKey;
-        }
-      }
-
-      if (bestScore >= 0.64) {
-        result += bestChar;
-      }
-    }
-
-    return result.trim();
-  }
 
   // --- Bottom-Anchored HUD & Quickslot Detector ---
   function detectBottomHud(w, h, data) {
@@ -1039,41 +918,60 @@
       }
     }
 
-    const defaultExpX = isWide ? (gameLeft + 434) : (gameLeft + Math.floor(clientW * 0.445) + 22);
-    const defaultExpY = isWide ? (gameBottom - 18) : (gameBottom - 19);
-
-    const expRect = {
-      x: Math.max(0, (yellowPixels > 6 ? expBarMinX + 22 : defaultExpX) + state.offsets.exp.dx),
-      y: Math.max(0, (yellowPixels > 6 ? expBarMinY - 2 : defaultExpY) + state.offsets.exp.dy),
-      w: isWide ? 145 : 155,
-      h: 15
-    };
+    let expRect;
+    if (state.customNorm.exp) {
+      const c = state.customNorm.exp;
+      expRect = {
+        x: Math.round(c.x * w) + state.offsets.exp.dx,
+        y: Math.round(c.y * h) + state.offsets.exp.dy,
+        w: Math.round(c.w * w),
+        h: Math.round(c.h * h)
+      };
+    } else {
+      const defaultExpX = isWide ? (gameLeft + 430) : (gameLeft + Math.floor(clientW * 0.445) + 18);
+      const defaultExpY = isWide ? (gameBottom - 18) : (gameBottom - 19);
+      expRect = {
+        x: Math.max(0, (yellowPixels > 6 ? expBarMinX + 18 : defaultExpX) + state.offsets.exp.dx),
+        y: Math.max(0, (yellowPixels > 6 ? expBarMinY - 2 : defaultExpY) + state.offsets.exp.dy),
+        w: isWide ? 158 : 168,
+        h: 15
+      };
+    }
 
     const cols = 4;
-    const rows = state.slotCount === 4 ? 1 : state.slotCount === 8 ? 2 : 3;
+    const rows = state.slotCount === 12 ? 3 : 2;
     const slotW = 35;
-    const slotH = 35;
-    const gridW = cols * slotW;
-    const gridH = rows * slotH;
+    const slotH = 34;
 
-    const defaultQsX = isWide
-      ? (gameLeft + clientW - 421)
-      : (gameLeft + clientW - 146);
+    let qsRect;
+    if (state.customNorm.qs) {
+      const q = state.customNorm.qs;
+      qsRect = {
+        x: Math.round(q.x * w) + state.offsets.qs.dx,
+        y: Math.round(q.y * h) + state.offsets.qs.dy,
+        w: Math.round(q.w * w),
+        h: Math.round(q.h * h),
+        cols,
+        rows,
+        slotW: (q.w * w) / cols,
+        slotH: (q.h * h) / rows
+      };
+    } else {
+      // Exact anchor for 12-slot (4x3) and 8-slot (4x2) quickslot panel at bottom-right
+      const defaultQsX = isWide ? (gameLeft + clientW - 421) : (gameLeft + clientW - 146);
+      const defaultQsY = (gameBottom - 1) - (rows * slotH) + 3;
 
-    const defaultQsY = state.slotCount === 4
-      ? (gameBottom - 1) - (3 * slotH)
-      : (gameBottom - 1) - gridH;
-
-    const qsRect = {
-      x: Math.max(0, defaultQsX + state.offsets.qs.dx),
-      y: Math.max(0, defaultQsY + state.offsets.qs.dy),
-      w: gridW,
-      h: gridH,
-      cols,
-      rows,
-      slotW,
-      slotH
-    };
+      qsRect = {
+        x: Math.max(0, defaultQsX + state.offsets.qs.dx),
+        y: Math.max(0, defaultQsY + state.offsets.qs.dy),
+        w: cols * slotW,
+        h: rows * slotH,
+        cols,
+        rows,
+        slotW,
+        slotH
+      };
+    }
 
     return { clientW, gameBottom, expRect, qsRect };
   }
@@ -1116,9 +1014,9 @@
                 winH: 290,
                 mesoRect: {
                   x: x,
-                  y: y - 5,
+                  y: y - 2,
                   w: 112,
-                  h: 15
+                  h: 17
                 }
               };
             }
@@ -1130,7 +1028,7 @@
   }
 
   // --- Main Frame Scanner ---
-  function scanFrame() {
+  async function scanFrame() {
     if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
 
     const vw = video.videoWidth;
@@ -1141,11 +1039,7 @@
     const fullImg = wCtx.getImageData(0, 0, vw, vh);
 
     const hud = detectBottomHud(vw, vh, fullImg.data);
-    state.detectedAnchor = hud;
-    $('detectedRes').textContent = `Client: ${hud.clientW}px wide (Bottom Y: ${hud.gameBottom})`;
-
     const inv = detectInventoryWindow(vw, vh, fullImg.data);
-    state.detectedInvRect = inv;
     $('invStatusTag').textContent = inv ? 'Inv: Open (Synced)' : 'Inv: Closed';
 
     overlayCanvas.width = vw;
@@ -1157,7 +1051,7 @@
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h);
 
-    // 2. Quickslot Outer Grid + Individual 32x32 Slot Boxes (Green)
+    // 2. Quickslot Outer Grid + Individual 32x32 Slot Thumbnails (Green)
     oCtx.strokeStyle = '#22c55e';
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.qsRect.x, hud.qsRect.y, hud.qsRect.w, hud.qsRect.h);
@@ -1166,9 +1060,14 @@
     for (let i = 0; i < state.slotCount; i++) {
       const col = i % hud.qsRect.cols;
       const row = Math.floor(i / hud.qsRect.cols);
-      const sx = hud.qsRect.x + col * hud.qsRect.slotW;
-      const sy = hud.qsRect.y + row * hud.qsRect.slotH;
+      const sx = Math.round(hud.qsRect.x + col * hud.qsRect.slotW);
+      const sy = Math.round(hud.qsRect.y + row * hud.qsRect.slotH);
       oCtx.strokeRect(sx, sy, 32, 32);
+
+      const slotCanvas = $(`qsCvs_${i}`);
+      if (slotCanvas) {
+        slotCanvas.getContext('2d').drawImage(workCanvas, sx, sy, 32, 32, 0, 0, 32, 32);
+      }
     }
 
     // 3. Inventory Meso Overlay (Amber)
@@ -1179,7 +1078,19 @@
       oCtx.strokeRect(inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h);
     }
 
-    // Read EXP Bar
+    // Draw live drag selection rectangle if calibrating
+    if (state.dragStart && state.dragCurrent) {
+      const dx = Math.min(state.dragStart.x, state.dragCurrent.x) * vw;
+      const dy = Math.min(state.dragStart.y, state.dragCurrent.y) * vh;
+      const dw = Math.abs(state.dragCurrent.x - state.dragStart.x) * vw;
+      const dh = Math.abs(state.dragCurrent.y - state.dragStart.y) * vh;
+      oCtx.strokeStyle = '#ffffff';
+      oCtx.setLineDash([4, 4]);
+      oCtx.strokeRect(dx, dy, dw, dh);
+      oCtx.setLineDash([]);
+    }
+
+    // Update Crop Thumbnails
     const expCrop = $('cropExp');
     expCrop.width = hud.expRect.w;
     expCrop.height = hud.expRect.h;
@@ -1188,37 +1099,7 @@
       hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h,
       0, 0, hud.expRect.w, hud.expRect.h
     );
-    const expData = wCtx.getImageData(hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h);
-    const rawExpStr = readMapleBitmapText(expData, 'white');
 
-    const cleanExpStr = rawExpStr.replace(/^[^0-9]+/, '');
-    const expMatch = cleanExpStr.match(/([\d,\.]+)\s*[\[\(]?\s*(\d{1,2}\.\d{1,2})%?/);
-    if (expMatch) {
-      const parsedExp = parseInt(expMatch[1].replace(/[^\d]/g, ''), 10);
-      const parsedPct = parseFloat(expMatch[2]);
-      $('readExp').textContent = `${fmtNum(parsedExp)} [${parsedPct.toFixed(2)}%]`;
-
-      if (state.mode === 'grinding') {
-        if (state.startExp === null) {
-          state.startExp = parsedExp;
-          state.currentExp = parsedExp;
-          state.currentPct = parsedPct;
-        } else {
-          const delta = parsedExp - state.currentExp;
-          if (delta >= 0 && delta < 15_000_000) {
-            state.expGained += delta;
-            state.currentExp = parsedExp;
-            state.currentPct = parsedPct;
-          }
-        }
-      }
-    } else if (rawExpStr) {
-      $('readExp').textContent = `Raw: "${rawExpStr}"`;
-    } else {
-      $('readExp').textContent = 'Use EXP Box nudge if needed';
-    }
-
-    // Read Inventory Mesos
     if (inv) {
       const mesoCrop = $('cropMeso');
       mesoCrop.width = inv.mesoRect.w;
@@ -1228,74 +1109,122 @@
         inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h,
         0, 0, inv.mesoRect.w, inv.mesoRect.h
       );
-      const mesoData = wCtx.getImageData(inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h);
-      const rawMesoStr = readMapleBitmapText(mesoData, 'dark');
-      const digits = rawMesoStr.replace(/[^\d]/g, '');
+    }
 
-      if (digits.length > 0) {
-        const parsedMeso = parseInt(digits, 10);
-        $('readMeso').textContent = `${fmtNum(parsedMeso)} mesos`;
+    if (!ocrWorker || ocrBusy) return;
+    ocrBusy = true;
 
-        if (state.mode === 'grinding' || state.mode === 'npc') {
-          if (state.lastMeso === null) {
-            state.lastMeso = parsedMeso;
-          } else {
-            const diff = parsedMeso - state.lastMeso;
-            if (diff > 0 && diff < 100_000_000) {
-              state.grossMesoGained += diff;
+    try {
+      // A. Read EXP Bar
+      const rawExpStr = await readUpscaledDigits(
+        workCanvas,
+        hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h,
+        'white-on-dark'
+      );
+      const cleanExpStr = rawExpStr.replace(/\s+/g, '');
+      const expMatch = cleanExpStr.match(/([\d,\.]+)[\[\(\|1I]?(\d{1,2}\.\d{1,2})%?/);
+
+      if (expMatch) {
+        const parsedExp = parseInt(expMatch[1].replace(/[^\d]/g, ''), 10);
+        const parsedPct = parseFloat(expMatch[2]);
+        if (!isNaN(parsedExp) && !isNaN(parsedPct)) {
+          $('readExp').textContent = `${fmtNum(parsedExp)} [${parsedPct.toFixed(2)}%]`;
+
+          if (state.mode === 'grinding') {
+            if (state.startExp === null) {
+              state.startExp = parsedExp;
+              state.currentExp = parsedExp;
+              state.currentPct = parsedPct;
+            } else {
+              const delta = parsedExp - state.currentExp;
+              if (delta >= 0 && delta < 15_000_000) {
+                state.expGained += delta;
+                state.currentExp = parsedExp;
+                state.currentPct = parsedPct;
+              }
             }
-            state.lastMeso = parsedMeso;
+          }
+        }
+      } else if (cleanExpStr) {
+        $('readExp').textContent = `Raw: "${cleanExpStr}"`;
+      }
+
+      // B. Read Inventory Mesos
+      if (inv) {
+        const rawMesoStr = await readUpscaledDigits(
+          workCanvas,
+          inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h,
+          'dark-on-white'
+        );
+        const digits = rawMesoStr.replace(/[^\d]/g, '');
+
+        if (digits.length > 0) {
+          const parsedMeso = parseInt(digits, 10);
+          $('readMeso').textContent = `${fmtNum(parsedMeso)} mesos`;
+
+          if (state.mode === 'grinding' || state.mode === 'npc') {
+            if (state.lastMeso === null) {
+              state.lastMeso = parsedMeso;
+            } else {
+              const diff = parsedMeso - state.lastMeso;
+              if (diff > 0 && diff < 100_000_000) {
+                state.grossMesoGained += diff;
+              }
+              state.lastMeso = parsedMeso;
+            }
           }
         }
       }
-    }
 
-    // Read Quickslots (4, 8, or 12 slots) using dedicated 1px black-outline stack count reader
-    for (let i = 0; i < state.slotCount; i++) {
-      const col = i % hud.qsRect.cols;
-      const row = Math.floor(i / hud.qsRect.cols);
-      const sx = hud.qsRect.x + col * hud.qsRect.slotW;
-      const sy = hud.qsRect.y + row * hud.qsRect.slotH;
+      // C. Read ONLY Selected/Tracked Quickslots (skipping "Not tracked" slots, just like Maple Track)
+      if (state.trackPots) {
+        for (let i = 0; i < state.slotCount; i++) {
+          const cfgKey = `${state.slotCount}_${i}`;
+          const cfg = state.slotConfig[cfgKey];
+          if (!cfg || cfg.preset === 'none') continue;
 
-      const slotCanvas = $(`qsCvs_${i}`);
-      if (slotCanvas) {
-        slotCanvas.getContext('2d').drawImage(workCanvas, sx, sy, 32, 32, 0, 0, 32, 32);
-      }
+          const col = i % hud.qsRect.cols;
+          const row = Math.floor(i / hud.qsRect.cols);
+          const sx = Math.round(hud.qsRect.x + col * hud.qsRect.slotW);
+          const sy = Math.round(hud.qsRect.y + row * hud.qsRect.slotH);
 
-      const slotData = wCtx.getImageData(sx, sy, 32, 32);
-      const rawCount = readQuickslotStackCount(slotData);
+          // Read bottom-left stack count area (x: 0..27, y: 18..31)
+          const rawCount = await readQuickslotDigits(workCanvas, sx, sy + 18, 28, 13);
 
-      if (!state.slotLive[i]) {
-        state.slotLive[i] = { count: null, lastCount: null, used: 0 };
-      }
+          if (!state.slotLive[i]) {
+            state.slotLive[i] = { count: null, lastCount: null, used: 0, restocked: 0 };
+          }
 
-      if (rawCount.length > 0) {
-        const count = parseInt(rawCount, 10);
-        state.slotLive[i].count = count;
+          if (rawCount.length > 0) {
+            const count = parseInt(rawCount, 10);
+            state.slotLive[i].count = count;
 
-        const cfgKey = `${state.slotCount}_${i}`;
-        const cfg = state.slotConfig[cfgKey];
-        const isTracked = cfg && cfg.preset !== 'none';
+            const prev = state.slotLive[i].lastCount;
+            if (prev !== null) {
+              if (count < prev && (prev - count) <= 30 && state.mode === 'grinding') {
+                state.slotLive[i].used += (prev - count);
+              } else if (count > prev && (count - prev) <= 2000) {
+                state.slotLive[i].restocked = (state.slotLive[i].restocked || 0) + (count - prev);
+              }
+            }
+            state.slotLive[i].lastCount = count;
 
-        if (state.mode === 'grinding' && isTracked) {
-          const prev = state.slotLive[i].lastCount;
-          if (prev !== null && count < prev && (prev - count) <= 25) {
-            state.slotLive[i].used += (prev - count);
+            const remEl = $(`qsRem_${i}`);
+            const usedEl = $(`qsUsed_${i}`);
+            if (remEl) remEl.textContent = `Remaining ${count}`;
+            if (usedEl) usedEl.textContent = `Used ${state.slotLive[i].used} · Restocked ${state.slotLive[i].restocked || 0}`;
           }
         }
-        state.slotLive[i].lastCount = count;
-
-        const cntEl = $(`qsCnt_${i}`);
-        const usedEl = $(`qsUsed_${i}`);
-        if (cntEl) cntEl.textContent = count;
-        if (usedEl) usedEl.textContent = `Used: ${state.slotLive[i].used}`;
       }
-    }
 
-    updateUI();
+      updateUI();
+    } finally {
+      ocrBusy = false;
+    }
   }
 
   $('btnRescan').addEventListener('click', scanFrame);
+  $('btnRescanQs').addEventListener('click', scanFrame);
 
   $('btnAddMeso').addEventListener('click', () => {
     const val = parseInt($('manualMesoInput').value, 10);
@@ -1510,6 +1439,7 @@
 
     for (const k of Object.keys(state.slotLive)) {
       state.slotLive[k].used = 0;
+      state.slotLive[k].restocked = 0;
       state.slotLive[k].lastCount = state.slotLive[k].count;
     }
     renderQuickslotCards();
@@ -1574,6 +1504,7 @@
       slotCount: state.slotCount,
       slotConfig: state.slotConfig,
       offsets: state.offsets,
+      customNorm: state.customNorm,
       logs: state.logs
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -1593,16 +1524,20 @@
         const data = JSON.parse(ev.target.result);
         if (data.slotCount) {
           state.slotCount = data.slotCount;
-          localStorage.setItem('ms_slotCount_v2', JSON.stringify(state.slotCount));
+          localStorage.setItem('ms_slotCount_v3', JSON.stringify(state.slotCount));
           updateSlotToggleLabel();
         }
         if (data.slotConfig) {
           state.slotConfig = data.slotConfig;
-          localStorage.setItem('ms_slotConfig', JSON.stringify(state.slotConfig));
+          localStorage.setItem('ms_slotConfig_v2', JSON.stringify(state.slotConfig));
         }
         if (data.offsets) {
           state.offsets = data.offsets;
-          localStorage.setItem('ms_offsets_v3', JSON.stringify(state.offsets));
+          localStorage.setItem('ms_offsets_v5', JSON.stringify(state.offsets));
+        }
+        if (data.customNorm) {
+          state.customNorm = data.customNorm;
+          localStorage.setItem('ms_customNorm_v1', JSON.stringify(state.customNorm));
         }
         if (Array.isArray(data.logs)) {
           state.logs = data.logs;
