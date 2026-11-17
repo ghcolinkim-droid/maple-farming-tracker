@@ -367,9 +367,14 @@
   <div id="tab-live" class="tab-panel active">
     <div class="card">
       <div class="card-head">
-        <h2>Latest game capture & OCR calibration</h2>
+        <div>
+          <h2>Latest game capture & calibration</h2>
+          <p style="font-size:0.75rem; color:var(--muted); margin-top:2px;">
+            Recommended: Use <strong>Ideal HUD scaling</strong> in MapleStory for 1:1 pixel accuracy. Glyphs auto-cache locally for instant Zero-OCR matching.
+          </p>
+        </div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-          <span id="detectedRes" style="font-size:0.78rem; color:var(--muted);">OCR Engine: Loading...</span>
+          <span id="detectedRes" style="font-size:0.78rem; color:var(--muted);">Engine: Loading...</span>
           <button id="btnDrawExp" class="sm">Select EXP readout</button>
           <button id="btnDrawMeso" class="sm">Select meso amount</button>
           <button id="btnDrawQs" class="sm">Select quickslots</button>
@@ -385,7 +390,7 @@
         <div class="status-list">
           <div class="status-item">
             <div>
-              <div class="s-lbl">EXP OCR INPUT (Exact crop fed to OCR)</div>
+              <div class="s-lbl">EXP READOUT INPUT</div>
               <div id="readExp" class="s-val">Waiting for window...</div>
             </div>
             <div class="ocr-pair">
@@ -430,7 +435,11 @@
         <button class="sm" data-nudge="qs:dy:-1">↑ Y</button>
         <button class="sm" data-nudge="qs:dy:1">Y ↓</button>
 
-        <button class="sm" id="btnResetHudOffset" style="margin-left:auto;">Reset auto regions</button>
+        <div style="margin-left:auto; display:flex; gap:6px;">
+          <button class="sm" id="btnClearMesoRegion">Clear meso region</button>
+          <button class="sm" id="btnClearGlyphCache" title="Clear learned bitmap font cache if HUD scale changed">Reset font cache</button>
+          <button class="sm" id="btnResetHudOffset">Reset auto regions</button>
+        </div>
       </div>
     </div>
 
@@ -440,7 +449,7 @@
         <div>
           <h2>Quickslot potions</h2>
           <p style="font-size:0.78rem; color:var(--muted); margin-top:2px;">
-            The tracker finds your 8- or 12-slot panel automatically. Choose a potion type for each slot you want to track; leave skills and empty slots as <strong>Not tracked</strong>.
+            Finds your 8- or 12-slot panel automatically. Choose a potion type for each slot you want to track; leave skills and empty slots as <strong>Not tracked</strong>.
           </p>
         </div>
         <span id="slotsDetectedPill" class="pill-tag">12 SLOTS DETECTED</span>
@@ -456,7 +465,7 @@
         <button id="btnToggleSlots" class="sm" style="margin-left:auto;">Panel: 12 Slots (4×3)</button>
       </div>
       <div style="font-size:0.74rem; color:var(--muted); margin-bottom:8px;">
-        Reading selected slots every 2 seconds. Unreadable frames keep the last count.
+        Reading selected slots every 2 seconds. Unreadable frames keep the last count; missing digits (such as a stack of 1) are never treated as zero.
       </div>
 
       <div id="quickslotGrid" class="qs-grid"></div>
@@ -555,11 +564,16 @@
       exp: { dx: 0, dy: 0 },
       qs:  { dx: 0, dy: 0 }
     }),
-    // Normalized drag-calibrated boxes (saved relative to frame size)
     customNorm: safeLoad('ms_customNorm_v2', {
       exp:  null,
       meso: null,
       qs:   null
+    }),
+    // Learned exact pixel-template dictionary: { exp: [...], meso: [...], qs: [...] }
+    glyphCache: safeLoad('ms_glyphTemplates_v1', {
+      exp:  [],
+      meso: [],
+      qs:   []
     }),
     drawTarget: null,
     dragStart: null,
@@ -588,7 +602,7 @@
     return `${h}:${m}:${s}`;
   };
 
-  // --- Initialize Whitelisted Tesseract Worker ---
+  // --- Initialize Whitelisted Tesseract Worker (Fallback Engine) ---
   async function initOcr() {
     try {
       ocrWorker = await Tesseract.createWorker('eng');
@@ -596,40 +610,150 @@
         tessedit_char_whitelist: '0123456789.,[]%',
         tessedit_pageseg_mode: '7'
       });
-      $('detectedRes').textContent = 'OCR Engine: Ready';
+      updateEngineStatus();
     } catch (e) {
-      $('detectedRes').textContent = 'OCR Engine: Error';
+      $('detectedRes').textContent = 'Engine: OCR Error';
       console.error(e);
     }
   }
   initOcr();
 
+  function updateEngineStatus() {
+    const totalTemplates = (state.glyphCache.exp?.length || 0) +
+                           (state.glyphCache.meso?.length || 0) +
+                           (state.glyphCache.qs?.length || 0);
+    $('detectedRes').textContent = `Bitmap Glyphs: ${totalTemplates} cached · OCR Fallback: ${ocrWorker ? 'Ready' : 'Loading'}`;
+  }
+
+  // --- Deterministic Bitmap Glyph Slicer & Template Matcher ---
+  function extractGlyphSlices(mask, w, h, minH = 4) {
+    const colHasInk = new Uint8Array(w);
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        if (mask[y * w + x]) {
+          colHasInk[x] = 1;
+          break;
+        }
+      }
+    }
+
+    const slices = [];
+    let startX = -1;
+    for (let x = 0; x <= w; x++) {
+      if (x < w && colHasInk[x]) {
+        if (startX === -1) startX = x;
+      } else if (startX !== -1) {
+        const endX = x - 1;
+        let minY = h, maxY = -1;
+        for (let yy = 0; yy < h; yy++) {
+          for (let xx = startX; xx <= endX; xx++) {
+            if (mask[yy * w + xx]) {
+              if (yy < minY) minY = yy;
+              if (yy > maxY) maxY = yy;
+            }
+          }
+        }
+        const gw = endX - startX + 1;
+        const gh = maxY - minY + 1;
+        // Keep digits (gh >= minH) plus commas/periods near the baseline
+        const isPunct = (gw >= 1 && gw <= 3 && gh >= 2 && gh <= 4 && minY >= Math.floor(h * 0.55));
+        if ((gh >= minH && gw >= 2) || isPunct) {
+          let bits = '';
+          for (let yy = minY; yy <= maxY; yy++) {
+            for (let xx = startX; xx <= endX; xx++) {
+              bits += mask[yy * w + xx] ? '1' : '0';
+            }
+          }
+          slices.push({ w: gw, h: gh, bits });
+        }
+        startX = -1;
+      }
+    }
+    return slices;
+  }
+
+  function matchGlyphsFromCache(fontKey, slices) {
+    const templates = state.glyphCache[fontKey] || [];
+    if (!templates.length || !slices.length) return null;
+
+    let decoded = '';
+    for (const s of slices) {
+      let bestChar = null;
+      let bestDiff = 999;
+      for (const tpl of templates) {
+        if (tpl.w !== s.w || tpl.h !== s.h) continue;
+        let diff = 0;
+        for (let k = 0; k < s.bits.length; k++) {
+          if (s.bits[k] !== tpl.bits[k]) diff++;
+          if (diff > 2) break;
+        }
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestChar = tpl.char;
+        }
+      }
+      // Allow at most 1 pixel tolerance (2 pixels for wide % glyphs)
+      const maxTol = s.w >= 7 ? 2 : 1;
+      if (bestChar !== null && bestDiff <= maxTol) {
+        decoded += bestChar;
+      } else {
+        return null; // Unseen glyph -> fall back to Tesseract
+      }
+    }
+    return decoded;
+  }
+
+  function learnGlyphTemplates(fontKey, slices, verifiedText) {
+    const cleanChars = verifiedText.replace(/\s+/g, '');
+    if (!slices.length || slices.length !== cleanChars.length) return;
+
+    const list = state.glyphCache[fontKey];
+    let added = false;
+
+    for (let i = 0; i < slices.length; i++) {
+      const ch = cleanChars[i];
+      if (!/[0-9.,\[\]%]/.test(ch)) continue;
+      const s = slices[i];
+      const exists = list.some(t => t.w === s.w && t.h === s.h && t.bits === s.bits);
+      if (!exists) {
+        list.push({ char: ch, w: s.w, h: s.h, bits: s.bits });
+        added = true;
+      }
+    }
+
+    if (added) {
+      localStorage.setItem('ms_glyphTemplates_v1', JSON.stringify(state.glyphCache));
+      updateEngineStatus();
+    }
+  }
+
   // --- 1. Quickslot White-Core-With-Black-Outline Extractor ---
   async function readQuickslotDigits(srcCanvas, sx, sy, sw, sh, debugCanvasId = null) {
-    if (!ocrWorker || sw <= 2 || sh <= 2) return '';
-
-    const img = wCtx.getImageData(sx, sy, sw, sh);
+    if (sw <= 2 || sh <= 2) return '';
+    const ctx = srcCanvas.getContext('2d', { willReadFrequently: true });
+    const img = ctx.getImageData(sx, sy, sw, sh);
     const d = img.data;
     const mask = new Uint8Array(sw * sh);
 
-    const isDarkBorder = (x, y) => {
+    const isBlackOutline = (x, y) => {
       if (x < 0 || y < 0 || x >= sw || y >= sh) return false;
       const i = (y * sw + x) * 4;
-      return d[i] < 75 && d[i + 1] < 75 && d[i + 2] < 75;
+      return d[i] < 55 && d[i + 1] < 55 && d[i + 2] < 55;
     };
 
-    // Keep white digit core pixels touching the 1px black font outline within 1-2px
+    // Strict pure-white digit core touching the 1px black font outline (rejects potion bottle glare)
     for (let y = 0; y < sh; y++) {
       for (let x = 0; x < sw; x++) {
         const i = (y * sw + x) * 4;
         const r = d[i], g = d[i + 1], b = d[i + 2];
-        const isWhiteFill = (r > 195 && g > 195 && b > 195 && Math.abs(r - b) < 30);
-        if (!isWhiteFill) continue;
+        const isPureWhite = (r > 230 && g > 230 && b > 230 && Math.abs(r - b) < 18);
+        if (!isPureWhite) continue;
 
         let touchesOutline = false;
-        for (let dy = -2; dy <= 2 && !touchesOutline; dy++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            if (isDarkBorder(x + dx, y + dy)) {
+        for (let dy = -1; dy <= 1 && !touchesOutline; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            if (isBlackOutline(x + dx, y + dy)) {
               touchesOutline = true;
               break;
             }
@@ -641,6 +765,33 @@
       }
     }
 
+    if (debugCanvasId && $(debugCanvasId)) {
+      const dbg = $(debugCanvasId);
+      dbg.width = sw;
+      dbg.height = sh;
+      const dbgCtx = dbg.getContext('2d');
+      const tImg = dbgCtx.createImageData(sw, sh);
+      for (let p = 0; p < sw * sh; p++) {
+        const v = mask[p] ? 0 : 255;
+        tImg.data[p * 4] = v;
+        tImg.data[p * 4 + 1] = v;
+        tImg.data[p * 4 + 2] = v;
+        tImg.data[p * 4 + 3] = 255;
+      }
+      dbgCtx.putImageData(tImg, 0, 0);
+    }
+
+    const slices = extractGlyphSlices(mask, sw, sh, 6);
+    if (!slices.length) return '';
+
+    // 1. Try deterministic bitmap template match first
+    const cached = matchGlyphsFromCache('qs', slices);
+    if (cached && /^\d+$/.test(cached)) {
+      return cached;
+    }
+
+    // 2. Fallback to Tesseract OCR
+    if (!ocrWorker) return '';
     const tmp = document.createElement('canvas');
     tmp.width = sw;
     tmp.height = sh;
@@ -655,13 +806,6 @@
     }
     tCtx.putImageData(tImg, 0, 0);
 
-    if (debugCanvasId && $(debugCanvasId)) {
-      const dbg = $(debugCanvasId);
-      dbg.width = sw;
-      dbg.height = sh;
-      dbg.getContext('2d').drawImage(tmp, 0, 0);
-    }
-
     const scale = 4;
     const pad = 12;
     scaleCanvas.width = sw * scale + pad * 2;
@@ -672,50 +816,64 @@
     sCtx.drawImage(tmp, 0, 0, sw, sh, pad, pad, sw * scale, sh * scale);
 
     const { data: { text } } = await ocrWorker.recognize(scaleCanvas);
-    return (text || '').replace(/[^\d]/g, '');
+    const digits = (text || '').replace(/[^\d]/g, '');
+
+    if (digits.length >= 1 && digits.length === slices.length) {
+      learnGlyphTemplates('qs', slices, digits);
+    }
+    return digits;
   }
 
-  // --- 2. 3x Upscaled + Binarized OCR Reader (EXP & Inventory Mesos) ---
-  async function readUpscaledDigits(srcCanvas, sx, sy, sw, sh, mode = 'white-on-dark', debugCanvasId = null) {
-    if (!ocrWorker || sw <= 2 || sh <= 2) return '';
+  // --- 2. Hybrid Bitmap + 3x Upscaled OCR Reader (EXP & Inventory Mesos) ---
+  async function readLineDigits(srcCanvas, sx, sy, sw, sh, mode = 'white-on-dark', debugCanvasId = null) {
+    if (sw <= 2 || sh <= 2) return '';
 
+    const ctx = srcCanvas.getContext('2d', { willReadFrequently: true });
+    const nativeImg = ctx.getImageData(sx, sy, sw, sh);
+    const nd = nativeImg.data;
+    const nativeMask = new Uint8Array(sw * sh);
+
+    for (let p = 0; p < sw * sh; p++) {
+      const i = p * 4;
+      const r = nd[i], g = nd[i + 1], b = nd[i + 2];
+      if (mode === 'white-on-dark') {
+        const minC = Math.min(r, g, b);
+        const maxC = Math.max(r, g, b);
+        if (minC > 185 && (maxC - minC) < 42) nativeMask[p] = 1;
+      } else {
+        const lum = r * 0.299 + g * 0.587 + b * 0.114;
+        if (lum < 155) nativeMask[p] = 1;
+      }
+    }
+
+    const fontKey = mode === 'white-on-dark' ? 'exp' : 'meso';
+    const slices = extractGlyphSlices(nativeMask, sw, sh, 6);
+
+    // Render 1x binarized preview for debugging
     const scale = 3;
     const pad = 10;
     const uw = Math.round(sw * scale);
     const uh = Math.round(sh * scale);
     scaleCanvas.width = uw + pad * 2;
     scaleCanvas.height = uh + pad * 2;
-
     sCtx.fillStyle = '#ffffff';
     sCtx.fillRect(0, 0, scaleCanvas.width, scaleCanvas.height);
     sCtx.imageSmoothingEnabled = false;
-    sCtx.drawImage(srcCanvas, sx, sy, sw, sh, pad, pad, uw, uh);
 
-    const img = sCtx.getImageData(pad, pad, uw, uh);
-    const d = img.data;
-
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i], g = d[i + 1], b = d[i + 2];
-      let isInk = false;
-
-      if (mode === 'white-on-dark') {
-        const minC = Math.min(r, g, b);
-        const maxC = Math.max(r, g, b);
-        isInk = (minC > 175 && (maxC - minC) < 48);
-      } else {
-        // Dark digits on white/light-grey Inventory Meso field
-        const lum = r * 0.299 + g * 0.587 + b * 0.114;
-        isInk = lum < 165;
-      }
-
-      const v = isInk ? 0 : 255;
-      d[i] = v;
-      d[i + 1] = v;
-      d[i + 2] = v;
-      d[i + 3] = 255;
+    const tmp = document.createElement('canvas');
+    tmp.width = sw;
+    tmp.height = sh;
+    const tCtx = tmp.getContext('2d');
+    const tImg = tCtx.createImageData(sw, sh);
+    for (let p = 0; p < sw * sh; p++) {
+      const v = nativeMask[p] ? 0 : 255;
+      tImg.data[p * 4] = v;
+      tImg.data[p * 4 + 1] = v;
+      tImg.data[p * 4 + 2] = v;
+      tImg.data[p * 4 + 3] = 255;
     }
-
-    sCtx.putImageData(img, pad, pad);
+    tCtx.putImageData(tImg, 0, 0);
+    sCtx.drawImage(tmp, 0, 0, sw, sh, pad, pad, uw, uh);
 
     if (debugCanvasId && $(debugCanvasId)) {
       const dbg = $(debugCanvasId);
@@ -724,8 +882,21 @@
       dbg.getContext('2d').drawImage(scaleCanvas, pad, pad, uw, uh, 0, 0, uw, uh);
     }
 
+    // 1. Try instant deterministic bitmap template match
+    const cached = matchGlyphsFromCache(fontKey, slices);
+    if (cached && cached.length >= 1) {
+      return cached;
+    }
+
+    // 2. Fallback to Tesseract OCR
+    if (!ocrWorker) return '';
     const { data: { text } } = await ocrWorker.recognize(scaleCanvas);
-    return (text || '').trim();
+    const cleaned = (text || '').trim();
+
+    if (cleaned.replace(/\s+/g, '').length === slices.length && slices.length >= 2) {
+      learnGlyphTemplates(fontKey, slices, cleaned);
+    }
+    return cleaned;
   }
 
   // --- Tabs ---
@@ -738,7 +909,7 @@
     });
   });
 
-  // --- Drag-to-Calibrate Buttons (Select EXP readout / Select meso amount / Select quickslots) ---
+  // --- Drag-to-Calibrate Buttons ---
   function armDrawTool(target, btnId) {
     state.drawTarget = state.drawTarget === target ? null : target;
     ['btnDrawExp', 'btnDrawMeso', 'btnDrawQs'].forEach(id => {
@@ -799,6 +970,19 @@
     });
   });
 
+  $('btnClearMesoRegion').addEventListener('click', () => {
+    state.customNorm.meso = null;
+    localStorage.setItem('ms_customNorm_v2', JSON.stringify(state.customNorm));
+    scanFrame();
+  });
+
+  $('btnClearGlyphCache').addEventListener('click', () => {
+    state.glyphCache = { exp: [], meso: [], qs: [] };
+    localStorage.setItem('ms_glyphTemplates_v1', JSON.stringify(state.glyphCache));
+    updateEngineStatus();
+    scanFrame();
+  });
+
   $('btnResetHudOffset').addEventListener('click', () => {
     state.offsets = { exp: { dx: 0, dy: 0 }, qs: { dx: 0, dy: 0 } };
     state.customNorm = { exp: null, meso: null, qs: null };
@@ -829,7 +1013,7 @@
     for (const k of Object.keys(state.slotLive)) {
       state.slotLive[k].used = 0;
       state.slotLive[k].restocked = 0;
-      state.slotLive[k].lastCount = state.slotLive[k].count;
+      state.slotLive[k].lastCount = null;
     }
     updateUI();
     renderQuickslotCards();
@@ -842,9 +1026,9 @@
     grid.innerHTML = '';
 
     for (let i = 0; i < state.slotCount; i++) {
-      const cfgKey = `${state.slotCount}_${i}`;
-      const cfg = state.slotConfig[cfgKey] || { preset: 'none', cost: 0 };
-      const live = state.slotLive[i] || { count: null, used: 0, restocked: 0 };
+      const slotKey = `${state.slotCount}_${i}`;
+      const cfg = state.slotConfig[slotKey] || { preset: 'none', cost: 0 };
+      const live = state.slotLive[slotKey] || { count: null, used: 0, restocked: 0 };
       const isTracked = cfg.preset !== 'none';
 
       const card = document.createElement('div');
@@ -858,7 +1042,7 @@
         <div class="qs-top">
           <div class="qs-title">Slot ${i + 1}</div>
           <div class="qs-thumbs">
-            <canvas id="qsBin_${i}" class="ocr-bin" width="28" height="13" title="Exact digits seen by OCR" style="${isTracked ? '' : 'display:none;'}"></canvas>
+            <canvas id="qsBin_${i}" class="ocr-bin" width="28" height="13" title="Exact digits isolated" style="${isTracked ? '' : 'display:none;'}"></canvas>
             <canvas id="qsCvs_${i}" width="32" height="32"></canvas>
           </div>
         </div>
@@ -888,7 +1072,7 @@
       $(`qsSel_${i}`).addEventListener('change', e => {
         const presetId = e.target.value;
         const found = POTION_PRESETS.find(p => p.id === presetId) || POTION_PRESETS[0];
-        state.slotConfig[cfgKey] = {
+        state.slotConfig[slotKey] = {
           preset: presetId,
           cost: presetId === 'custom' ? (cfg.cost || 1000) : found.cost
         };
@@ -901,7 +1085,7 @@
       const costInput = $(`qsCost_${i}`);
       if (costInput) {
         costInput.addEventListener('input', e => {
-          state.slotConfig[cfgKey].cost = Math.max(0, parseFloat(e.target.value) || 0);
+          state.slotConfig[slotKey].cost = Math.max(0, parseFloat(e.target.value) || 0);
           localStorage.setItem('ms_slotConfig_v2', JSON.stringify(state.slotConfig));
           updateUI();
         });
@@ -910,12 +1094,12 @@
   }
   renderQuickslotCards();
 
-  // --- Automatic 32x32 Quickslot Panel Finder ---
+  // --- Automatic 32x32 Quickslot Panel Finder (Bottom-Right Above Status Bar) ---
   function findQuickslotPanel(w, h, data, gameLeft, clientW, gameBottom) {
     const cols = 4;
     const rows = state.slotCount === 12 ? 3 : 2;
     const slotW = 35;
-    const slotH = 34;
+    const slotH = 35;
 
     if (state.customNorm.qs) {
       const q = state.customNorm.qs;
@@ -931,38 +1115,44 @@
       };
     }
 
-    const searchX0 = gameLeft + Math.floor(clientW * 0.55);
-    const searchX1 = gameLeft + clientW - (cols * slotW) - 4;
-    const searchY0 = gameBottom - 135;
-    const searchY1 = gameBottom - (rows * slotH) + 6;
+    const panelW = cols * slotW;
+    const panelH = rows * slotH;
 
+    // Default bottom-right quickslot position sitting directly above the ~29px bottom HUD bar
+    let bestX = gameLeft + clientW - panelW - 4;
+    let bestY = gameBottom - 29 - panelH;
     let bestScore = -1;
-    let bestX = gameLeft + clientW - 421;
-    let bestY = (gameBottom - 1) - (rows * slotH) + 3;
+
+    const searchX0 = Math.max(0, bestX - 60);
+    const searchX1 = Math.min(w - panelW - 1, gameLeft + clientW - panelW + 2);
+    const searchY0 = Math.max(0, bestY - 40);
+    const searchY1 = Math.min(h - panelH - 1, gameBottom - 20 - panelH);
 
     for (let y = searchY0; y <= searchY1; y++) {
       for (let x = searchX0; x <= searchX1; x++) {
-        let whiteHits = 0;
-        let darkFrameHits = 0;
+        let gridBorderHits = 0;
+        let innerBrightHits = 0;
 
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
             const sx = x + c * slotW;
             const sy = y + r * slotH;
 
-            const bi = ((sy + 16) * w + (sx - 1)) * 4;
-            if (data[bi] < 110 && data[bi + 1] < 110 && data[bi + 2] < 110) darkFrameHits++;
+            // 1px dark outer slot separator on left/top edge
+            const bi = ((sy + 16) * w + Math.max(0, sx - 1)) * 4;
+            if (data[bi] < 105 && data[bi + 1] < 105 && data[bi + 2] < 105) gridBorderHits++;
 
-            const wi1 = ((sy + 5) * w + (sx + 25)) * 4;
-            if (data[wi1] > 215 && data[wi1 + 1] > 215 && data[wi1 + 2] > 215) whiteHits++;
+            // Bright frame/hotkey corner pixel inside 32x32 slot
+            const wi1 = ((sy + 4) * w + (sx + 26)) * 4;
+            if (data[wi1] > 210 && data[wi1 + 1] > 210 && data[wi1 + 2] > 210) innerBrightHits++;
 
-            const wi2 = ((sy + 28) * w + (sx + 28)) * 4;
-            if (data[wi2] > 215 && data[wi2 + 1] > 215 && data[wi2 + 2] > 215) whiteHits++;
+            const wi2 = ((sy + 27) * w + (sx + 27)) * 4;
+            if (data[wi2] > 210 && data[wi2 + 1] > 210 && data[wi2 + 2] > 210) innerBrightHits++;
           }
         }
 
-        const score = whiteHits * 2 + darkFrameHits * 3;
-        if (score > bestScore && whiteHits >= cols * rows) {
+        const score = gridBorderHits * 3 + innerBrightHits * 2;
+        if (score > bestScore && gridBorderHits >= Math.floor(cols * rows * 0.6)) {
           bestScore = score;
           bestX = x;
           bestY = y;
@@ -973,8 +1163,8 @@
     return {
       x: Math.max(0, bestX + state.offsets.qs.dx),
       y: Math.max(0, bestY + state.offsets.qs.dy),
-      w: cols * slotW,
-      h: rows * slotH,
+      w: panelW,
+      h: panelH,
       cols,
       rows,
       slotW,
@@ -982,48 +1172,28 @@
     };
   }
 
-  // --- Bottom-Anchored HUD Detector ---
+  // --- Bottom-Anchored HUD Detector (Self-Centering on EXP Text) ---
   function detectBottomHud(w, h, data) {
+    // Handle windowed capture border (e.g., 1368x759 -> 1366 client width with 1px frame)
+    let clientW = w;
+    let gameLeft = 0;
+    if (w >= 1366 && w <= 1374) {
+      clientW = 1366;
+      gameLeft = Math.floor((w - 1366) / 2);
+    } else if (w >= 1024 && w <= 1032) {
+      clientW = 1024;
+      gameLeft = Math.floor((w - 1024) / 2);
+    } else if (w >= 800 && w <= 808) {
+      clientW = 800;
+      gameLeft = Math.floor((w - 800) / 2);
+    }
+
     let gameBottom = h - 1;
-    for (let y = h - 1; y > h - 15; y--) {
+    for (let y = h - 1; y > h - 12; y--) {
       const i = (y * w + Math.floor(w * 0.5)) * 4;
       if (data[i + 3] > 200) {
         gameBottom = y;
         break;
-      }
-    }
-
-    let gameLeft = 0;
-    for (let x = 0; x < 10; x++) {
-      const i = ((gameBottom - 12) * w + x) * 4;
-      if (data[i] < 45 && data[i + 1] < 45 && data[i + 2] < 45) {
-        gameLeft = x;
-        break;
-      }
-    }
-
-    const clientW = w - gameLeft * 2;
-    const isWide = clientW >= 1200;
-
-    // Scan bottom 34px strip for yellow EXP bar
-    const scanTop = gameBottom - 34;
-    let expBarMinX = w, expBarMinY = h, yellowPixels = 0;
-
-    for (let y = scanTop; y <= gameBottom; y++) {
-      let rowYellow = 0;
-      let rMinX = w;
-      for (let x = gameLeft + 180; x < gameLeft + Math.floor(clientW * 0.75); x++) {
-        const i = (y * w + x) * 4;
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        if (r > 205 && g > 170 && b < 65) {
-          rowYellow++;
-          if (x < rMinX) rMinX = x;
-        }
-      }
-      if (rowYellow >= 3) {
-        yellowPixels += rowYellow;
-        if (rMinX < expBarMinX) expBarMinX = rMinX;
-        if (y < expBarMinY) expBarMinY = y;
       }
     }
 
@@ -1037,21 +1207,56 @@
         h: Math.round(c.h * h)
       };
     } else {
-      const defaultExpX = isWide ? (gameLeft + 430) : (gameLeft + Math.floor(clientW * 0.445) + 18);
-      const defaultExpY = isWide ? (gameBottom - 18) : (gameBottom - 19);
-      expRect = {
-        x: Math.max(0, (yellowPixels > 6 ? expBarMinX + 18 : defaultExpX) + state.offsets.exp.dx),
-        y: Math.max(0, (yellowPixels > 6 ? expBarMinY - 2 : defaultExpY) + state.offsets.exp.dy),
-        w: isWide ? 162 : 172,
-        h: 15
-      };
+      // Scan the centered EXP text band inside the bottom EXP bar (never anchored to yellow fill start)
+      const bandX0 = gameLeft + Math.round(clientW * 0.34);
+      const bandX1 = gameLeft + Math.round(clientW * 0.60);
+      const bandY0 = Math.max(0, gameBottom - 17);
+      const bandY1 = Math.max(0, gameBottom - 2);
+
+      let minTextX = bandX1, maxTextX = bandX0;
+      let minTextY = bandY1, maxTextY = bandY0;
+      let whiteTextHits = 0;
+
+      for (let y = bandY0; y <= bandY1; y++) {
+        for (let x = bandX0; x <= bandX1; x++) {
+          const i = (y * w + x) * 4;
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          if (r > 215 && g > 215 && b > 215 && Math.abs(r - b) < 25) {
+            whiteTextHits++;
+            if (x < minTextX) minTextX = x;
+            if (x > maxTextX) maxTextX = x;
+            if (y < minTextY) minTextY = y;
+            if (y > maxTextY) maxTextY = y;
+          }
+        }
+      }
+
+      if (whiteTextHits >= 18 && (maxTextX - minTextX) >= 45) {
+        // Skip "EXP " label on the left (~24px) if captured, keeping digits + [XX.XX%]
+        const spanW = maxTextX - minTextX + 8;
+        expRect = {
+          x: Math.max(0, minTextX - 3 + state.offsets.exp.dx),
+          y: Math.max(0, minTextY - 2 + state.offsets.exp.dy),
+          w: Math.min(210, Math.max(120, spanW)),
+          h: Math.min(18, Math.max(13, maxTextY - minTextY + 5))
+        };
+      } else {
+        const defaultExpX = gameLeft + Math.round(clientW * 0.415);
+        const defaultExpY = gameBottom - 16;
+        expRect = {
+          x: Math.max(0, defaultExpX + state.offsets.exp.dx),
+          y: Math.max(0, defaultExpY + state.offsets.exp.dy),
+          w: 175,
+          h: 14
+        };
+      }
     }
 
     const qsRect = findQuickslotPanel(w, h, data, gameLeft, clientW, gameBottom);
     return { clientW, gameBottom, expRect, qsRect };
   }
 
-  // --- Classic Light-Grey "ITEM INVENTORY" & Meso Box Detector ---
+  // --- Classic Light-Grey "ITEM INVENTORY" & Exact White Meso Box Detector ---
   function detectInventoryWindow(w, h, data) {
     if (state.customNorm.meso) {
       const m = state.customNorm.meso;
@@ -1069,27 +1274,36 @@
     }
 
     for (let y = 140; y < h - 45; y += 2) {
-      for (let x = 35; x < w - 125; x += 2) {
+      for (let x = 40; x < w - 100; x += 2) {
         const i = (y * w + x) * 4;
         const r = data[i], g = data[i + 1], b = data[i + 2];
 
-        if (r >= 232 && g >= 232 && b >= 232 && Math.abs(r - b) < 12) {
+        // Left edge of the white meso text field
+        if (r >= 235 && g >= 235 && b >= 235 && Math.abs(r - b) < 10) {
           const li = (y * w + (x - 2)) * 4;
           if (data[li] >= 225 && data[li + 1] >= 225 && data[li + 2] >= 225) continue;
 
-          let brightRun = 0;
+          // Measure contiguous width of the white meso box (~74..86px wide)
+          let runW = 0;
           let darkTextPixels = 0;
-          for (let dx = 0; dx < 98; dx++) {
+          for (let dx = 0; dx < 88; dx++) {
             const wi = (y * w + x + dx) * 4;
             const wr = data[wi], wg = data[wi + 1], wb = data[wi + 2];
-            if (wr >= 228 && wg >= 228 && wb >= 228) brightRun++;
-            else if (wr < 160 && wg < 160 && wb < 160) darkTextPixels++;
+            if (wr >= 230 && wg >= 230 && wb >= 230) {
+              runW++;
+            } else if (wr < 155 && wg < 155 && wb < 155) {
+              runW++;
+              darkTextPixels++;
+            } else {
+              break;
+            }
           }
 
-          if (brightRun >= 68 && darkTextPixels >= 2) {
+          if (runW >= 70 && runW <= 88 && darkTextPixels >= 2) {
+            // Confirm gold MESO coin icon directly to the LEFT of x (x - 34 .. x - 4)
             let goldPixels = 0;
-            for (let gy = y - 2; gy <= y + 2; gy++) {
-              for (let gx = x - 36; gx <= x - 6; gx++) {
+            for (let gy = y - 2; gy <= y + 3; gy++) {
+              for (let gx = x - 34; gx <= x - 4; gx++) {
                 if (gx < 0 || gy < 0) continue;
                 const gi = (gy * w + gx) * 4;
                 if (data[gi] > 175 && data[gi + 1] > 125 && data[gi + 2] < 100) goldPixels++;
@@ -1102,12 +1316,12 @@
                 winY: Math.max(0, y - 248),
                 winW: 172,
                 winH: 290,
-                // Offset +34px past the gold MESO coin icon so only the white number field is cropped
+                // x is already the left edge of the white number field; frame only the white box
                 mesoRect: {
-                  x: x + 34,
+                  x: x + 1,
                   y: y - 2,
-                  w: 84,
-                  h: 17
+                  w: Math.max(72, runW - 2),
+                  h: 16
                 }
               };
             }
@@ -1202,19 +1416,18 @@
       );
     }
 
-    if (!ocrWorker || ocrBusy) return;
+    if (ocrBusy) return;
     ocrBusy = true;
 
     try {
       // A. Read EXP Bar
-      const rawExpStr = await readUpscaledDigits(
+      const rawExpStr = await readLineDigits(
         workCanvas,
         hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h,
         'white-on-dark',
         'binExp'
       );
 
-      // Anchor on the decimal percentage at the end (e.g. "49.94%") FIRST so EXP digits never steal the tens digit
       const expMatch = rawExpStr.match(/([\d,]{1,12})[^\d\.]*(\d{1,2}\.\d{2})\s*%?/);
 
       if (expMatch) {
@@ -1244,7 +1457,7 @@
 
       // B. Read Inventory Mesos
       if (inv) {
-        const rawMesoStr = await readUpscaledDigits(
+        const rawMesoStr = await readLineDigits(
           workCanvas,
           inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h,
           'dark-on-white',
@@ -1270,11 +1483,11 @@
         }
       }
 
-      // C. Read ONLY Selected/Tracked Quickslots (Unreadable frames keep the last count)
+      // C. Read ONLY Selected/Tracked Quickslots (Unreadable/blank frames keep the last count)
       if (state.trackPots) {
         for (let i = 0; i < state.slotCount; i++) {
-          const cfgKey = `${state.slotCount}_${i}`;
-          const cfg = state.slotConfig[cfgKey];
+          const slotKey = `${state.slotCount}_${i}`;
+          const cfg = state.slotConfig[slotKey];
           if (!cfg || cfg.preset === 'none') continue;
 
           const col = i % hud.qsRect.cols;
@@ -1284,33 +1497,33 @@
 
           const rawCount = await readQuickslotDigits(
             workCanvas,
-            sx, sy + 18, 28, 13,
+            sx + 1, sy + 19, 28, 12,
             `qsBin_${i}`
           );
 
-          if (!state.slotLive[i]) {
-            state.slotLive[i] = { count: null, lastCount: null, used: 0, restocked: 0 };
+          if (!state.slotLive[slotKey]) {
+            state.slotLive[slotKey] = { count: null, lastCount: null, used: 0, restocked: 0 };
           }
 
           if (rawCount.length > 0) {
             const count = parseInt(rawCount, 10);
             if (!isNaN(count) && count >= 1 && count <= 9999) {
-              state.slotLive[i].count = count;
+              state.slotLive[slotKey].count = count;
 
-              const prev = state.slotLive[i].lastCount;
+              const prev = state.slotLive[slotKey].lastCount;
               if (prev !== null) {
                 if (count < prev && (prev - count) <= 30 && state.mode === 'grinding') {
-                  state.slotLive[i].used += (prev - count);
+                  state.slotLive[slotKey].used += (prev - count);
                 } else if (count > prev && (count - prev) <= 2000) {
-                  state.slotLive[i].restocked = (state.slotLive[i].restocked || 0) + (count - prev);
+                  state.slotLive[slotKey].restocked = (state.slotLive[slotKey].restocked || 0) + (count - prev);
                 }
               }
-              state.slotLive[i].lastCount = count;
+              state.slotLive[slotKey].lastCount = count;
 
               const remEl = $(`qsRem_${i}`);
               const usedEl = $(`qsUsed_${i}`);
               if (remEl) remEl.textContent = `Remaining ${count}`;
-              if (usedEl) usedEl.textContent = `Used ${state.slotLive[i].used} · Restocked ${state.slotLive[i].restocked || 0}`;
+              if (usedEl) usedEl.textContent = `Used ${state.slotLive[slotKey].used} · Restocked ${state.slotLive[slotKey].restocked || 0}`;
             }
           }
         }
@@ -1404,8 +1617,9 @@
     let totalCost = 0;
     let totalPots = 0;
     for (let i = 0; i < state.slotCount; i++) {
-      const cfg = state.slotConfig[`${state.slotCount}_${i}`];
-      const live = state.slotLive[i];
+      const slotKey = `${state.slotCount}_${i}`;
+      const cfg = state.slotConfig[slotKey];
+      const live = state.slotLive[slotKey];
       if (cfg && cfg.preset !== 'none' && live && live.used > 0) {
         totalPots += live.used;
         totalCost += live.used * (cfg.cost || 0);
@@ -1539,7 +1753,7 @@
     for (const k of Object.keys(state.slotLive)) {
       state.slotLive[k].used = 0;
       state.slotLive[k].restocked = 0;
-      state.slotLive[k].lastCount = state.slotLive[k].count;
+      state.slotLive[k].lastCount = null;
     }
     renderQuickslotCards();
     updateUI();
@@ -1604,6 +1818,7 @@
       slotConfig: state.slotConfig,
       offsets: state.offsets,
       customNorm: state.customNorm,
+      glyphCache: state.glyphCache,
       logs: state.logs
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -1637,6 +1852,11 @@
         if (data.customNorm) {
           state.customNorm = data.customNorm;
           localStorage.setItem('ms_customNorm_v2', JSON.stringify(state.customNorm));
+        }
+        if (data.glyphCache) {
+          state.glyphCache = data.glyphCache;
+          localStorage.setItem('ms_glyphTemplates_v1', JSON.stringify(state.glyphCache));
+          updateEngineStatus();
         }
         if (Array.isArray(data.logs)) {
           state.logs = data.logs;
