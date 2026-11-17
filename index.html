@@ -353,4 +353,872 @@
           <button class="sm" data-nudge="dy:-1">↑</button>
           <button class="sm" data-nudge="dy:1">↓</button>
           <button class="sm" data-nudge="dw:1">+Width</button>
-          <button class="sm" data-nudge="dw:-
+          <button class="sm" data-nudge="dw:-1">-Width</button>
+          <button class="sm" data-nudge="dh:1">+Height</button>
+          <button class="sm" data-nudge="dh:-1">-Height</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Live Preprocessed OCR Reads (6x Upscaled)</h2>
+        <div class="ocr-row">
+          <div>
+            <div class="ocr-meta">EXP Digits</div>
+            <div id="readExp" class="ocr-read">Waiting...</div>
+          </div>
+          <canvas id="cvsExp"></canvas>
+        </div>
+
+        <div class="ocr-row">
+          <div>
+            <div class="ocr-meta">Inventory Mesos</div>
+            <div id="readMeso" class="ocr-read">Waiting...</div>
+          </div>
+          <canvas id="cvsMeso"></canvas>
+        </div>
+
+        <div class="ocr-row">
+          <div>
+            <div class="ocr-meta">HP Potion Count</div>
+            <div id="readPot1" class="ocr-read">Waiting...</div>
+          </div>
+          <canvas id="cvsPot1"></canvas>
+        </div>
+
+        <div class="ocr-row">
+          <div>
+            <div class="ocr-meta">MP Potion Count</div>
+            <div id="readPot2" class="ocr-read">Waiting...</div>
+          </div>
+          <canvas id="cvsPot2"></canvas>
+        </div>
+
+        <p style="font-size:0.78rem; color:var(--muted); margin-top:8px; line-height:1.5;">
+          ⚡ Click <strong>1. Capture Maple Window</strong> → select your MapleStory window → click <strong>Auto-Set 1366×768 HUD</strong>. Use the <code>← → ↑ ↓</code> buttons if any box needs a 1–2px nudge.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 2: Potion Prices & Manual Overrides -->
+  <div id="tab-pots" class="tab-panel">
+    <div class="workspace">
+      <div class="card">
+        <h2>Potion Unit Costs (Mesos per Pot)</h2>
+        <div class="form-grid">
+          <label>HP Potion Name
+            <input type="text" id="hpName" value="Ginger Ale / Unagi" />
+          </label>
+          <label>Cost per HP Pot (Mesos)
+            <input type="number" id="hpCost" value="3800" min="0" />
+          </label>
+          <label>MP Potion Name
+            <input type="text" id="mpName" value="Mana Elixir / Ginger Ale" />
+          </label>
+          <label>Cost per MP Pot (Mesos)
+            <input type="number" id="mpCost" value="600" min="0" />
+          </label>
+        </div>
+        <p style="font-size:0.78rem; color:var(--muted); margin-top:10px;">
+          If you use one combo potion (like Ginger Ale), set HP Pot Cost to <strong>3800</strong> and MP Pot Cost to <strong>0</strong>.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Quick Manual Adjustments (Optional)</h2>
+        <div class="form-grid">
+          <label>Add/Subtract Mesos (+/-)
+            <input type="number" id="manualMesoInput" placeholder="e.g. 45000" />
+          </label>
+          <div style="display:flex; align-items:flex-end;">
+            <button id="btnAddMeso" style="width:100%">Apply Meso Adjustment</button>
+          </div>
+          <label>Add Used HP Pots
+            <input type="number" id="manualHpInput" placeholder="e.g. 50" />
+          </label>
+          <div style="display:flex; align-items:flex-end;">
+            <button id="btnAddHp" style="width:100%">Add HP Pots Used</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 3: Saved Session Logs & Backup -->
+  <div id="tab-logs" class="tab-panel">
+    <div class="card">
+      <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+        <h2>Saved Grind Sessions & Settings Backup</h2>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <button id="btnExportJson">📤 Backup JSON</button>
+          <button id="btnImportJson">📥 Restore JSON</button>
+          <input type="file" id="fileImportJson" accept=".json" style="display:none" />
+          <button id="btnExportCsv">⬇ Export CSV</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Date / Map</th>
+            <th>Grind Time</th>
+            <th>EXP / hr</th>
+            <th>Gross Mesos</th>
+            <th>Pot Burn</th>
+            <th>Net Profit / hr</th>
+          </tr>
+        </thead>
+        <tbody id="logTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // --- Safe localStorage Loader ---
+  function safeLoadJson(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  // --- State ---
+  const state = {
+    mode: 'idle',
+    expSeconds: 0,
+    mesoSeconds: 0,
+
+    startExp: null,
+    currentExp: null,
+    currentPct: 0,
+    expGained: 0,
+
+    lastMeso: null,
+    grossMesoGained: 0,
+
+    lastPot1: null,
+    pot1Used: 0,
+    lastPot2: null,
+    pot2Used: 0,
+
+    activeTarget: 'exp',
+    isZoomed: false,
+    rois: safeLoadJson('ms_rois', {}),
+    logs: safeLoadJson('ms_logs', [])
+  };
+
+  let ocrWorker = null;
+  let timerWorker = null;
+  let isScanning = false;
+  let pipWindow = null;
+
+  // --- DOM Helpers ---
+  const $ = id => document.getElementById(id);
+  const video = $('gameVideo');
+  const stage = $('videoStage');
+  const viewport = $('videoViewport');
+
+  const fmtNum = n => Math.round(n).toLocaleString('en-US');
+  const fmtCompact = n => {
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1_000_000) return sign + (abs / 1_000_000).toFixed(2) + 'M';
+    if (abs >= 1_000) return sign + (abs / 1_000).toFixed(1) + 'k';
+    return sign + Math.round(abs);
+  };
+  const fmtTime = sec => {
+    const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+    const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+    const s = String(Math.floor(sec % 60)).padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
+
+  // --- 1-Click Auto-Preset for 1366x768 MapleStory Classic Windowed HUD ---
+  $('btnPreset1366').addEventListener('click', () => {
+    // Measured directly from your 1366x768 windowed screenshot proportions
+    state.rois.exp  = { x: 0.344, y: 0.892, w: 0.118, h: 0.025 };
+    state.rois.pot1 = { x: 0.843, y: 0.873, w: 0.023, h: 0.021 };
+    state.rois.pot2 = { x: 0.869, y: 0.873, w: 0.023, h: 0.021 };
+
+    localStorage.setItem('ms_rois', JSON.stringify(state.rois));
+    renderRoiBoxes();
+    if (video.readyState >= 2) runOcrPass();
+  });
+
+  // --- Zoom Toggle ---
+  $('btnZoom').addEventListener('click', () => {
+    state.isZoomed = !state.isZoomed;
+    stage.classList.toggle('zoomed', state.isZoomed);
+    $('btnZoom').textContent = state.isZoomed ? '🔍 Fit 1x' : '🔍 Zoom 2.4x';
+    if (state.isZoomed) {
+      viewport.scrollTop = viewport.scrollHeight;
+    }
+  });
+
+  // --- Tabs ---
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      $(btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // --- Load Saved Potion Settings ---
+  function loadPotionInputs() {
+    ['hpName', 'hpCost', 'mpName', 'mpCost'].forEach(key => {
+      const saved = localStorage.getItem('ms_' + key);
+      if (saved !== null) $(key).value = saved;
+    });
+  }
+  loadPotionInputs();
+
+  ['hpName', 'hpCost', 'mpName', 'mpCost'].forEach(key => {
+    $(key).addEventListener('input', () => {
+      localStorage.setItem('ms_' + key, $(key).value);
+      updateUI();
+    });
+  });
+
+  // --- ROI Box Drawing & Nudging ---
+  document.querySelectorAll('.target-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.target-btn').forEach(b => b.classList.remove('primary'));
+      btn.classList.add('primary');
+      state.activeTarget = btn.dataset.target;
+    });
+  });
+
+  function renderRoiBoxes() {
+    const map = { exp: 'boxExp', meso: 'boxMeso', pot1: 'boxPot1', pot2: 'boxPot2' };
+    for (const [key, elId] of Object.entries(map)) {
+      const el = $(elId);
+      const r = state.rois[key];
+      if (r && typeof r.x === 'number' && r.w > 0 && r.h > 0) {
+        el.style.display = 'block';
+        el.style.left = (r.x * 100) + '%';
+        el.style.top = (r.y * 100) + '%';
+        el.style.width = (r.w * 100) + '%';
+        el.style.height = (r.h * 100) + '%';
+      } else {
+        el.style.display = 'none';
+      }
+    }
+  }
+  renderRoiBoxes();
+
+  document.querySelectorAll('[data-nudge]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const r = state.rois[state.activeTarget];
+      if (!r) return;
+      const vw = video.videoWidth || 1366;
+      const vh = video.videoHeight || 768;
+      const [prop, dirStr] = btn.dataset.nudge.split(':');
+      const dir = parseInt(dirStr, 10);
+
+      if (prop === 'dx') r.x = Math.max(0, Math.min(1 - r.w, r.x + dir / vw));
+      if (prop === 'dy') r.y = Math.max(0, Math.min(1 - r.h, r.y + dir / vh));
+      if (prop === 'dw') r.w = Math.max(2 / vw, Math.min(1 - r.x, r.w + dir / vw));
+      if (prop === 'dh') r.h = Math.max(2 / vh, Math.min(1 - r.y, r.h + dir / vh));
+
+      localStorage.setItem('ms_rois', JSON.stringify(state.rois));
+      renderRoiBoxes();
+      if (video.readyState >= 2) runOcrPass();
+    });
+  });
+
+  $('btnClearBoxes').addEventListener('click', () => {
+    state.rois = {};
+    localStorage.removeItem('ms_rois');
+    renderRoiBoxes();
+  });
+
+  let dragStart = null;
+  stage.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    const rect = stage.getBoundingClientRect();
+    dragStart = {
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height
+    };
+    const dr = $('dragRect');
+    dr.style.display = 'block';
+    dr.style.left = (dragStart.x * 100) + '%';
+    dr.style.top = (dragStart.y * 100) + '%';
+    dr.style.width = '0%';
+    dr.style.height = '0%';
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragStart) return;
+    const rect = stage.getBoundingClientRect();
+    const curX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const curY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    const x = Math.min(dragStart.x, curX);
+    const y = Math.min(dragStart.y, curY);
+    const w = Math.abs(curX - dragStart.x);
+    const h = Math.abs(curY - dragStart.y);
+    const dr = $('dragRect');
+    dr.style.left = (x * 100) + '%';
+    dr.style.top = (y * 100) + '%';
+    dr.style.width = (w * 100) + '%';
+    dr.style.height = (h * 100) + '%';
+  });
+
+  window.addEventListener('mouseup', e => {
+    if (!dragStart) return;
+    const rect = stage.getBoundingClientRect();
+    const curX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const curY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    const x = Math.min(dragStart.x, curX);
+    const y = Math.min(dragStart.y, curY);
+    const w = Math.abs(curX - dragStart.x);
+    const h = Math.abs(curY - dragStart.y);
+    dragStart = null;
+    $('dragRect').style.display = 'none';
+
+    if (w > 0.003 && h > 0.003) {
+      state.rois[state.activeTarget] = { x, y, w, h };
+      localStorage.setItem('ms_rois', JSON.stringify(state.rois));
+      renderRoiBoxes();
+      if (video.readyState >= 2) runOcrPass();
+    }
+  });
+
+  // --- Floating Picture-in-Picture Mini HUD ---
+  $('btnPip').addEventListener('click', async () => {
+    if (pipWindow && !pipWindow.closed) {
+      pipWindow.focus();
+      return;
+    }
+
+    try {
+      if ('documentPictureInPicture' in window) {
+        pipWindow = await window.documentPictureInPicture.requestWindow({
+          width: 330,
+          height: 158
+        });
+      } else {
+        pipWindow = window.open('', 'MapleMiniHUD', 'width=330,height=158,menubar=no,toolbar=no,location=no,status=no');
+      }
+
+      if (!pipWindow) return;
+
+      pipWindow.document.head.innerHTML = `
+        <title>🍁 Mini HUD</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+          body {
+            background: #0f1117;
+            color: #e6e9f0;
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100vh;
+            user-select: none;
+            overflow: hidden;
+          }
+          .top { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #8b93a7; }
+          .pill { padding: 2px 7px; border-radius: 99px; font-weight: 700; font-size: 10px; text-transform: uppercase; }
+          .pill.idle { background: #2c3142; color: #8b93a7; }
+          .pill.grinding { background: rgba(34,197,94,0.2); color: #22c55e; }
+          .pill.npc { background: rgba(245,158,11,0.2); color: #f59e0b; }
+          .pill.paused { background: rgba(239,68,68,0.2); color: #ef4444; }
+          .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
+          .box { background: #181b24; border: 1px solid #2c3142; border-radius: 7px; padding: 6px 9px; }
+          .lbl { font-size: 10px; color: #8b93a7; text-transform: uppercase; display: flex; justify-content: space-between; }
+          .val { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 1px; }
+          .blue { color: #4f8cff; }
+          .green { color: #22c55e; }
+          .red { color: #ef4444; }
+          .btns { display: grid; grid-template-columns: 1fr 1.2fr 0.9fr; gap: 6px; }
+          button {
+            background: #202430; color: #e6e9f0; border: 1px solid #2c3142;
+            border-radius: 5px; padding: 5px 6px; font-size: 11px; font-weight: 700; cursor: pointer;
+          }
+          button:hover { border-color: #4f8cff; }
+          button.g { border-color: rgba(34,197,94,0.5); color: #22c55e; }
+          button.a { border-color: rgba(245,158,11,0.5); color: #f59e0b; }
+          button.r { border-color: rgba(239,68,68,0.5); color: #ef4444; }
+        </style>
+      `;
+
+      pipWindow.document.body.innerHTML = `
+        <div class="top">
+          <span id="pipStatus" class="pill idle">Idle</span>
+          <span id="pipClock">00:00:00</span>
+        </div>
+        <div class="stats">
+          <div class="box">
+            <div class="lbl"><span>EXP / hr</span><span id="pipTtl">--:--</span></div>
+            <div id="pipExp" class="val blue">0</div>
+          </div>
+          <div class="box">
+            <div class="lbl"><span>Net / hr</span><span id="pipPct">0.0%</span></div>
+            <div id="pipNet" class="val green">0</div>
+          </div>
+        </div>
+        <div class="btns">
+          <button id="pipBtnGrind" class="g">▶ Grind</button>
+          <button id="pipBtnNpc" class="a">💰 NPC Sell</button>
+          <button id="pipBtnPause" class="r">⏸ Pause</button>
+        </div>
+      `;
+
+      pipWindow.document.getElementById('pipBtnGrind').onclick = () => { if (state.mode !== 'idle') setMode('grinding'); };
+      pipWindow.document.getElementById('pipBtnNpc').onclick = () => { if (state.mode !== 'idle') setMode('npc'); };
+      pipWindow.document.getElementById('pipBtnPause').onclick = () => { if (state.mode !== 'idle') setMode('paused'); };
+
+      updateUI();
+    } catch (err) {
+      console.error('Could not open Mini HUD:', err);
+    }
+  });
+
+  // --- Background Web Worker Timer ---
+  function startBackgroundTimer() {
+    if (timerWorker) return;
+    const blob = new Blob([`
+      setInterval(() => postMessage('tick'), 1000);
+    `], { type: 'application/javascript' });
+    timerWorker = new Worker(URL.createObjectURL(blob));
+    let tickCount = 0;
+
+    timerWorker.onmessage = () => {
+      if (state.mode === 'grinding') {
+        state.expSeconds += 1;
+        state.mesoSeconds += 1;
+      } else if (state.mode === 'npc') {
+        state.mesoSeconds += 1;
+      }
+      updateUI();
+
+      tickCount++;
+      if (tickCount % 3 === 0 && video.readyState >= 2) {
+        runOcrPass();
+      }
+    };
+  }
+
+  // --- Initialize Tesseract OCR Worker ---
+  async function initOcr() {
+    if (ocrWorker) return;
+    ocrWorker = await Tesseract.createWorker('eng');
+    await ocrWorker.setParameters({
+      tessedit_char_whitelist: '0123456789.,[]()% ',
+      tessedit_pageseg_mode: '7'
+    });
+  }
+
+  // --- Screen Capture (Opens directly on Window tab without Chrome constraint errors) ---
+  $('btnCapture').addEventListener('click', async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          displaySurface: 'window',
+          cursor: 'never',
+          frameRate: 15
+        },
+        audio: false,
+        selfBrowserSurface: 'exclude'
+      });
+      video.srcObject = stream;
+      await video.play();
+
+      $('btnGrind').disabled = false;
+      $('btnNpc').disabled = false;
+      $('btnPause').disabled = false;
+      $('btnSaveSession').disabled = false;
+      setMode('grinding');
+
+      await initOcr();
+      startBackgroundTimer();
+      runOcrPass();
+    } catch (err) {
+      $('statusBadge').textContent = 'Capture Error: ' + (err.name || 'Cancelled');
+      console.error('Screen capture failed:', err);
+    }
+  });
+
+  // --- Mode Switching ---
+  function setMode(newMode) {
+    state.mode = newMode;
+    const badge = $('statusBadge');
+    badge.className = 'badge ' + newMode;
+
+    if (newMode === 'grinding') {
+      badge.textContent = '● Grinding (EXP + Meso Live)';
+    } else if (newMode === 'npc') {
+      badge.textContent = '💰 NPC Sell Mode (EXP Paused)';
+    } else if (newMode === 'paused') {
+      badge.textContent = '⏸ Full Pause';
+    }
+    updateUI();
+  }
+
+  $('btnGrind').addEventListener('click', () => setMode('grinding'));
+  $('btnNpc').addEventListener('click', () => setMode('npc'));
+  $('btnPause').addEventListener('click', () => setMode('paused'));
+
+  // --- Specialized Image Preprocessing ---
+  function extractPreprocessedCanvas(roi, targetCanvas, filterMode = 'auto') {
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (!vw || !vh) return false;
+
+    const sx = Math.floor(roi.x * vw);
+    const sy = Math.floor(roi.y * vh);
+    const sw = Math.max(1, Math.floor(roi.w * vw));
+    const sh = Math.max(1, Math.floor(roi.h * vh));
+
+    const scale = 6;
+    const pad = 16;
+
+    targetCanvas.width = sw * scale + pad * 2;
+    targetCanvas.height = sh * scale + pad * 2;
+
+    const ctx = targetCanvas.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
+
+    const tmp = document.createElement('canvas');
+    tmp.width = sw * scale;
+    tmp.height = sh * scale;
+    const tCtx = tmp.getContext('2d', { willReadFrequently: true });
+    tCtx.imageSmoothingEnabled = false;
+    tCtx.drawImage(video, sx, sy, sw, sh, 0, 0, tmp.width, tmp.height);
+
+    const img = tCtx.getImageData(0, 0, tmp.width, tmp.height);
+    const d = img.data;
+
+    if (filterMode === 'whiteText') {
+      for (let i = 0; i < d.length; i += 4) {
+        const isWhiteDigit = d[i] > 165 && d[i + 1] > 165 && d[i + 2] > 165;
+        const val = isWhiteDigit ? 0 : 255;
+        d[i] = d[i + 1] = d[i + 2] = val;
+      }
+    } else {
+      let avgLum = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        avgLum += (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+      }
+      avgLum /= (d.length / 4);
+      const darkBg = avgLum < 128;
+
+      for (let i = 0; i < d.length; i += 4) {
+        let lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+        if (darkBg) lum = 255 - lum;
+        const val = lum > 130 ? 255 : 0;
+        d[i] = d[i + 1] = d[i + 2] = val;
+      }
+    }
+
+    tCtx.putImageData(img, 0, 0);
+    ctx.drawImage(tmp, pad, pad);
+    return true;
+  }
+
+  // --- OCR Scanning & Anti-Glitch Sanity Filters ---
+  async function runOcrPass() {
+    if (isScanning || !ocrWorker) return;
+    isScanning = true;
+
+    try {
+      // 1. EXP Bar
+      if (state.rois.exp && extractPreprocessedCanvas(state.rois.exp, $('cvsExp'), 'whiteText')) {
+        const { data: { text } } = await ocrWorker.recognize($('cvsExp'));
+        const clean = text.trim();
+        const expMatch = clean.match(/([\d,]+)\s*[\[\(]?\s*(\d{1,2}\.\d{1,2})%?/);
+        if (expMatch) {
+          const parsedExp = parseInt(expMatch[1].replace(/,/g, ''), 10);
+          const parsedPct = parseFloat(expMatch[2]);
+          $('readExp').textContent = `${fmtNum(parsedExp)} (${parsedPct.toFixed(2)}%)`;
+
+          if (state.mode === 'grinding') {
+            if (state.startExp === null) {
+              state.startExp = parsedExp;
+              state.currentExp = parsedExp;
+              state.currentPct = parsedPct;
+            } else {
+              const delta = parsedExp - state.currentExp;
+              if (delta >= 0 && delta < 10_000_000) {
+                state.expGained += delta;
+                state.currentExp = parsedExp;
+                state.currentPct = parsedPct;
+              }
+            }
+          }
+        } else {
+          $('readExp').textContent = `Raw: "${clean || 'none'}"`;
+        }
+      }
+
+      // 2. Inventory Mesos
+      if (state.rois.meso && extractPreprocessedCanvas(state.rois.meso, $('cvsMeso'), 'auto')) {
+        const { data: { text } } = await ocrWorker.recognize($('cvsMeso'));
+        const digits = text.replace(/[^\d]/g, '');
+        if (digits.length > 0) {
+          const parsedMeso = parseInt(digits, 10);
+          $('readMeso').textContent = fmtNum(parsedMeso);
+
+          if (state.mode === 'grinding' || state.mode === 'npc') {
+            if (state.lastMeso === null) {
+              state.lastMeso = parsedMeso;
+            } else {
+              const diff = parsedMeso - state.lastMeso;
+              if (diff > 0 && diff < 50_000_000) {
+                state.grossMesoGained += diff;
+              }
+              state.lastMeso = parsedMeso;
+            }
+          }
+        } else {
+          $('readMeso').textContent = `Raw: "${text.trim() || 'none'}"`;
+        }
+      }
+
+      // 3. Potion Slots
+      if (state.rois.pot1 && extractPreprocessedCanvas(state.rois.pot1, $('cvsPot1'), 'whiteText')) {
+        const { data: { text } } = await ocrWorker.recognize($('cvsPot1'));
+        const digits = text.replace(/[^\d]/g, '');
+        if (digits.length > 0) {
+          const count = parseInt(digits, 10);
+          $('readPot1').textContent = count;
+          if (state.mode === 'grinding') {
+            if (state.lastPot1 !== null && count < state.lastPot1 && (state.lastPot1 - count) <= 25) {
+              state.pot1Used += (state.lastPot1 - count);
+            }
+            state.lastPot1 = count;
+          }
+        } else {
+          $('readPot1').textContent = `Raw: "${text.trim() || 'none'}"`;
+        }
+      }
+
+      if (state.rois.pot2 && extractPreprocessedCanvas(state.rois.pot2, $('cvsPot2'), 'whiteText')) {
+        const { data: { text } } = await ocrWorker.recognize($('cvsPot2'));
+        const digits = text.replace(/[^\d]/g, '');
+        if (digits.length > 0) {
+          const count = parseInt(digits, 10);
+          $('readPot2').textContent = count;
+          if (state.mode === 'grinding') {
+            if (state.lastPot2 !== null && count < state.lastPot2 && (state.lastPot2 - count) <= 25) {
+              state.pot2Used += (state.lastPot2 - count);
+            }
+            state.lastPot2 = count;
+          }
+        } else {
+          $('readPot2').textContent = `Raw: "${text.trim() || 'none'}"`;
+        }
+      }
+
+      updateUI();
+    } finally {
+      isScanning = false;
+    }
+  }
+
+  // --- Manual Adjustments ---
+  $('btnAddMeso').addEventListener('click', () => {
+    const val = parseInt($('manualMesoInput').value, 10);
+    if (!isNaN(val)) {
+      state.grossMesoGained += val;
+      $('manualMesoInput').value = '';
+      updateUI();
+    }
+  });
+
+  $('btnAddHp').addEventListener('click', () => {
+    const val = parseInt($('manualHpInput').value, 10);
+    if (!isNaN(val)) {
+      state.pot1Used += val;
+      $('manualHpInput').value = '';
+      updateUI();
+    }
+  });
+
+  // --- Render Live KPIs ---
+  function updateUI() {
+    $('expClock').textContent = fmtTime(state.expSeconds);
+    $('mesoClock').textContent = fmtTime(state.mesoSeconds);
+
+    const expHrs = state.expSeconds / 3600;
+    const expPerHr = expHrs > 0 ? state.expGained / expHrs : 0;
+    $('kpiExpHr').textContent = fmtNum(expPerHr);
+    $('kpiExpSub').textContent = `Session: +${fmtNum(state.expGained)} EXP`;
+    $('currentPct').textContent = `${state.currentPct.toFixed(2)}%`;
+    $('kpiCurrentExp').textContent = `Current: ${fmtNum(state.currentExp || 0)} EXP`;
+
+    let ttlStr = '--:--';
+    if (expPerHr > 0 && state.currentExp > 0 && state.currentPct > 0 && state.currentPct < 100) {
+      const totalLevelExp = state.currentExp / (state.currentPct / 100);
+      const remainingExp = Math.max(0, totalLevelExp - state.currentExp);
+      const minsLeft = Math.round((remainingExp / expPerHr) * 60);
+      const h = Math.floor(minsLeft / 60);
+      const m = minsLeft % 60;
+      ttlStr = `${h}h ${m}m`;
+    }
+    $('kpiTtl').textContent = ttlStr;
+
+    const hpCost = parseFloat($('hpCost').value) || 0;
+    const mpCost = parseFloat($('mpCost').value) || 0;
+    const potBurn = (state.pot1Used * hpCost) + (state.pot2Used * mpCost);
+    const netProfit = state.grossMesoGained - potBurn;
+
+    const mesoHrs = state.mesoSeconds / 3600;
+    const netPerHr = mesoHrs > 0 ? netProfit / mesoHrs : 0;
+
+    const netEl = $('kpiNetHr');
+    netEl.textContent = (netPerHr >= 0 ? '+' : '') + fmtNum(netPerHr);
+    netEl.className = 'kpi-value ' + (netPerHr >= 0 ? 'val-green' : 'val-red');
+
+    $('kpiNetSub').textContent = `Net Session: ${(netProfit >= 0 ? '+' : '') + fmtNum(netProfit)} mesos`;
+    $('kpiGrossMeso').textContent = `+${fmtNum(state.grossMesoGained)}`;
+    $('kpiPotBurn').textContent = `Pot Burn: -${fmtNum(potBurn)} (${state.pot1Used + state.pot2Used} pots)`;
+
+    if (pipWindow && !pipWindow.closed) {
+      const pDoc = pipWindow.document;
+      const pStatus = pDoc.getElementById('pipStatus');
+      if (pStatus) {
+        pStatus.className = 'pill ' + state.mode;
+        pStatus.textContent = state.mode === 'grinding' ? 'Grinding' : state.mode === 'npc' ? 'NPC Sell' : state.mode === 'paused' ? 'Paused' : 'Idle';
+        pDoc.getElementById('pipClock').textContent = fmtTime(state.mode === 'npc' ? state.mesoSeconds : state.expSeconds);
+        pDoc.getElementById('pipTtl').textContent = ttlStr;
+        pDoc.getElementById('pipExp').textContent = fmtCompact(expPerHr);
+        pDoc.getElementById('pipPct').textContent = `${state.currentPct.toFixed(1)}%`;
+
+        const pNet = pDoc.getElementById('pipNet');
+        pNet.textContent = (netPerHr >= 0 ? '+' : '') + fmtCompact(netPerHr);
+        pNet.className = 'val ' + (netPerHr >= 0 ? 'green' : 'red');
+      }
+    }
+  }
+
+  // --- Save Session, JSON Backup/Restore & CSV Export ---
+  $('btnSaveSession').addEventListener('click', () => {
+    const mapName = prompt('Enter Map Name (e.g., Coolie Zombies, Wolf Spiders, Himes):', 'Grind Session');
+    if (!mapName) return;
+
+    const hpCost = parseFloat($('hpCost').value) || 0;
+    const mpCost = parseFloat($('mpCost').value) || 0;
+    const potBurn = (state.pot1Used * hpCost) + (state.pot2Used * mpCost);
+    const netProfit = state.grossMesoGained - potBurn;
+
+    const expHrs = Math.max(1 / 3600, state.expSeconds / 3600);
+    const mesoHrs = Math.max(1 / 3600, state.mesoSeconds / 3600);
+
+    state.logs.unshift({
+      date: new Date().toLocaleDateString(),
+      map: mapName,
+      duration: fmtTime(state.expSeconds),
+      expHr: Math.round(state.expGained / expHrs),
+      grossMeso: state.grossMesoGained,
+      potBurn: Math.round(potBurn),
+      netHr: Math.round(netProfit / mesoHrs)
+    });
+
+    localStorage.setItem('ms_logs', JSON.stringify(state.logs));
+    renderLogs();
+
+    Object.assign(state, {
+      expSeconds: 0, mesoSeconds: 0,
+      startExp: null, expGained: 0,
+      lastMeso: null, grossMesoGained: 0,
+      lastPot1: null, pot1Used: 0,
+      lastPot2: null, pot2Used: 0
+    });
+    updateUI();
+  });
+
+  function renderLogs() {
+    const tbody = $('logTableBody');
+    if (!state.logs.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No saved sessions yet. Click "Save & Reset" after a grind!</td></tr>';
+      return;
+    }
+    tbody.innerHTML = state.logs.map(l => `
+      <tr>
+        <td><strong>${l.map}</strong><br><span style="font-size:0.75rem;color:var(--muted)">${l.date}</span></td>
+        <td>${l.duration}</td>
+        <td class="val-blue"><strong>${fmtNum(l.expHr)}</strong></td>
+        <td>+${fmtNum(l.grossMeso)}</td>
+        <td class="val-red">-${fmtNum(l.potBurn)}</td>
+        <td class="${l.netHr >= 0 ? 'val-green' : 'val-red'}"><strong>${fmtNum(l.netHr)}</strong></td>
+      </tr>
+    `).join('');
+  }
+  renderLogs();
+
+  $('btnExportJson').addEventListener('click', () => {
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      rois: state.rois,
+      potions: {
+        hpName: $('hpName').value,
+        hpCost: $('hpCost').value,
+        mpName: $('mpName').value,
+        mpCost: $('mpCost').value
+      },
+      logs: state.logs
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `maple-tracker-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  });
+
+  $('btnImportJson').addEventListener('click', () => $('fileImportJson').click());
+  $('fileImportJson').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (data.rois) {
+          state.rois = data.rois;
+          localStorage.setItem('ms_rois', JSON.stringify(state.rois));
+          renderRoiBoxes();
+        }
+        if (data.potions) {
+          for (const [k, v] of Object.entries(data.potions)) {
+            localStorage.setItem('ms_' + k, v);
+          }
+          loadPotionInputs();
+        }
+        if (Array.isArray(data.logs)) {
+          state.logs = data.logs;
+          localStorage.setItem('ms_logs', JSON.stringify(state.logs));
+          renderLogs();
+        }
+        updateUI();
+        alert('Backup restored successfully!');
+      } catch {
+        alert('Invalid JSON backup file.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+
+  $('btnExportCsv').addEventListener('click', () => {
+    if (!state.logs.length) return;
+    const header = 'Date,Map,Grind Duration,EXP/hr,Gross Mesos,Pot Burn,Net Profit/hr\n';
+    const rows = state.logs.map(l =>
+      `"${l.date}","${l.map}","${l.duration}",${l.expHr},${l.grossMeso},${l.potBurn},${l.netHr}`
+    ).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `maple-grind-logs-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  });
+})();
+</script>
+</body>
+</html>
