@@ -31,7 +31,6 @@
       margin: 0 auto;
     }
 
-    /* Top Control Bar */
     header {
       display: flex;
       flex-wrap: wrap;
@@ -81,7 +80,6 @@
     button.purple { background: rgba(168, 85, 247, 0.15); border-color: var(--purple); color: #d8b4fe; }
     button.sm { padding: 4px 9px; font-size: 0.78rem; }
 
-    /* Hero KPI Strip */
     .kpi-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -114,7 +112,6 @@
     .val-red { color: var(--red); }
     .val-blue { color: var(--accent); }
 
-    /* Tabs */
     .tabs {
       display: flex;
       gap: 6px;
@@ -136,7 +133,6 @@
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
-    /* Capture & Calibration Area */
     .workspace {
       display: grid;
       grid-template-columns: 1.45fr 1fr;
@@ -152,6 +148,7 @@
     }
     .card-head {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
       gap: 8px;
@@ -159,7 +156,6 @@
     }
     .card h2 { font-size: 0.92rem; color: var(--text); }
 
-    /* Scrollable Zoom Viewport */
     .video-viewport {
       width: 100%;
       height: 390px;
@@ -225,7 +221,6 @@
       color: var(--muted);
     }
 
-    /* OCR Preview & Potion Settings */
     .ocr-row {
       display: flex;
       align-items: center;
@@ -238,8 +233,8 @@
       margin-bottom: 8px;
     }
     .ocr-row canvas {
-      height: 34px;
-      max-width: 190px;
+      height: 36px;
+      max-width: 210px;
       background: #fff;
       border: 1px solid var(--border);
       border-radius: 4px;
@@ -265,7 +260,6 @@
     }
     input:focus { outline: none; border-color: var(--accent); }
 
-    /* Session Table */
     table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
     th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
     th { color: var(--muted); font-weight: 600; font-size: 0.76rem; text-transform: uppercase; }
@@ -328,8 +322,11 @@
     <div class="workspace">
       <div class="card">
         <div class="card-head">
-          <h2>2. Zoom In & Drag Tightly Around Digits Only</h2>
-          <button id="btnZoom" class="sm primary">🔍 Zoom 2.4x (Easy Crop)</button>
+          <h2>2. Auto-Preset or Drag Boxes</h2>
+          <div style="display:flex; gap:6px;">
+            <button id="btnPreset1366" class="sm green">⚡ Auto-Set 1366×768 HUD</button>
+            <button id="btnZoom" class="sm primary">🔍 Zoom 2.4x</button>
+          </div>
         </div>
         <div class="video-viewport" id="videoViewport">
           <div class="video-stage" id="videoStage">
@@ -366,7 +363,7 @@
         <h2>Live Preprocessed OCR Reads (6x Upscaled)</h2>
         <div class="ocr-row">
           <div>
-            <div class="ocr-meta">EXP Digits (Exclude yellow "EXP" tag)</div>
+            <div class="ocr-meta">EXP Digits</div>
             <div id="readExp" class="ocr-read">Waiting...</div>
           </div>
           <canvas id="cvsExp"></canvas>
@@ -374,7 +371,7 @@
 
         <div class="ocr-row">
           <div>
-            <div class="ocr-meta">Inventory Mesos (Include full left side)</div>
+            <div class="ocr-meta">Inventory Mesos</div>
             <div id="readMeso" class="ocr-read">Waiting...</div>
           </div>
           <canvas id="cvsMeso"></canvas>
@@ -382,7 +379,7 @@
 
         <div class="ocr-row">
           <div>
-            <div class="ocr-meta">HP Potion Count (Bottom-left number only)</div>
+            <div class="ocr-meta">HP Potion Count</div>
             <div id="readPot1" class="ocr-read">Waiting...</div>
           </div>
           <canvas id="cvsPot1"></canvas>
@@ -390,14 +387,14 @@
 
         <div class="ocr-row">
           <div>
-            <div class="ocr-meta">MP Potion Count (Bottom-left number only)</div>
+            <div class="ocr-meta">MP Potion Count</div>
             <div id="readPot2" class="ocr-read">Waiting...</div>
           </div>
           <canvas id="cvsPot2"></canvas>
         </div>
 
         <p style="font-size:0.78rem; color:var(--muted); margin-top:8px; line-height:1.5;">
-          💡 <strong>1366×768 Tip:</strong> Click <strong>🔍 Zoom 2.4x</strong>, scroll to the bottom HUD, and draw boxes tightly around <em>just the white numbers</em> (don't include the yellow EXP label or the potion icon artwork).
+          ⚡ Click <strong>Auto-Set 1366×768 HUD</strong> to snap the <strong>EXP Bar</strong>, <strong>HP Pot</strong>, and <strong>MP Pot</strong> boxes into place automatically—then only drag a box around <strong>Inventory Meso</strong> if you want live meso tracking!
         </p>
       </div>
     </div>
@@ -479,7 +476,7 @@
 (() => {
   // --- State ---
   const state = {
-    mode: 'idle', // 'idle' | 'grinding' | 'npc' | 'paused'
+    mode: 'idle',
     expSeconds: 0,
     mesoSeconds: 0,
 
@@ -528,13 +525,25 @@
     return `${h}:${m}:${s}`;
   };
 
-  // --- Zoom Toggle for Easy Cropping ---
+  // --- 1-Click Auto-Preset for 1366x768 MapleStory Classic Windowed HUD ---
+  $('btnPreset1366').addEventListener('click', () => {
+    // Calibrated to MapleStory 1366x768 windowed frame (including standard Windows titlebar)
+    state.rois.exp  = { x: 0.348, y: 0.935, w: 0.118, h: 0.024 };
+    // Quickslot Top Row Slot #2 (HP Pot) & Slot #3 (MP Pot) bottom-left stack digits
+    state.rois.pot1 = { x: 0.873, y: 0.873, w: 0.021, h: 0.020 };
+    state.rois.pot2 = { x: 0.899, y: 0.873, w: 0.021, h: 0.020 };
+
+    localStorage.setItem('ms_rois', JSON.stringify(state.rois));
+    renderRoiBoxes();
+    runOcrPass();
+  });
+
+  // --- Zoom Toggle ---
   $('btnZoom').addEventListener('click', () => {
     state.isZoomed = !state.isZoomed;
     stage.classList.toggle('zoomed', state.isZoomed);
-    $('btnZoom').textContent = state.isZoomed ? '🔍 Fit 1x (Full View)' : '🔍 Zoom 2.4x (Easy Crop)';
+    $('btnZoom').textContent = state.isZoomed ? '🔍 Fit 1x' : '🔍 Zoom 2.4x';
     if (state.isZoomed) {
-      // Auto-scroll toward bottom HUD where EXP & quickslots live
       viewport.scrollTop = viewport.scrollHeight;
     }
   });
@@ -592,7 +601,6 @@
   }
   renderRoiBoxes();
 
-  // Pixel-level nudge controls
   document.querySelectorAll('[data-nudge]').forEach(btn => {
     btn.addEventListener('click', () => {
       const r = state.rois[state.activeTarget];
@@ -787,13 +795,13 @@
     };
   }
 
-  // --- Initialize Tesseract OCR Worker (Single-Line Mode PSM 7) ---
+  // --- Initialize Tesseract OCR Worker ---
   async function initOcr() {
     if (ocrWorker) return;
     ocrWorker = await Tesseract.createWorker('eng');
     await ocrWorker.setParameters({
       tessedit_char_whitelist: '0123456789.,[]()% ',
-      tessedit_pageseg_mode: '7' // Single line of text (much more accurate for HUD numbers)
+      tessedit_pageseg_mode: '7'
     });
   }
 
@@ -838,8 +846,10 @@
   $('btnNpc').addEventListener('click', () => setMode('npc'));
   $('btnPause').addEventListener('click', () => setMode('paused'));
 
-  // --- High-DPI Image Preprocessing (6x Nearest-Neighbor + White Padding) ---
-  function extractPreprocessedCanvas(roi, targetCanvas) {
+  // --- Specialized Image Preprocessing ---
+  // mode = 'whiteText' (for white EXP bar & white potion numbers over dark/colorful icons)
+  // mode = 'auto' (for dark meso numbers on light grey inventory box)
+  function extractPreprocessedCanvas(roi, targetCanvas, filterMode = 'auto') {
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     if (!vw || !vh) return false;
@@ -849,8 +859,8 @@
     const sw = Math.max(1, Math.floor(roi.w * vw));
     const sh = Math.max(1, Math.floor(roi.h * vh));
 
-    const scale = 6; // 6x upscale for 1366x768 tiny bitmap fonts
-    const pad = 16;  // White margin so Tesseract doesn't clip edge digits
+    const scale = 6;
+    const pad = 16;
 
     targetCanvas.width = sw * scale + pad * 2;
     targetCanvas.height = sh * scale + pad * 2;
@@ -859,7 +869,6 @@
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
 
-    // Draw scaled crop into temporary offscreen canvas to threshold cleanly
     const tmp = document.createElement('canvas');
     tmp.width = sw * scale;
     tmp.height = sh * scale;
@@ -869,19 +878,30 @@
 
     const img = tCtx.getImageData(0, 0, tmp.width, tmp.height);
     const d = img.data;
-    let avgLum = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      avgLum += (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
-    }
-    avgLum /= (d.length / 4);
-    const darkBg = avgLum < 128;
 
-    for (let i = 0; i < d.length; i += 4) {
-      let lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-      if (darkBg) lum = 255 - lum;
-      const val = lum > 130 ? 255 : 0;
-      d[i] = d[i + 1] = d[i + 2] = val;
+    if (filterMode === 'whiteText') {
+      // Extract ONLY bright white HUD font pixels (strips colorful potion art & dark outlines)
+      for (let i = 0; i < d.length; i += 4) {
+        const isWhiteDigit = d[i] > 205 && d[i + 1] > 205 && d[i + 2] > 205;
+        const val = isWhiteDigit ? 0 : 255; // Black text on pure white background
+        d[i] = d[i + 1] = d[i + 2] = val;
+      }
+    } else {
+      let avgLum = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        avgLum += (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+      }
+      avgLum /= (d.length / 4);
+      const darkBg = avgLum < 128;
+
+      for (let i = 0; i < d.length; i += 4) {
+        let lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+        if (darkBg) lum = 255 - lum;
+        const val = lum > 130 ? 255 : 0;
+        d[i] = d[i + 1] = d[i + 2] = val;
+      }
     }
+
     tCtx.putImageData(img, 0, 0);
     ctx.drawImage(tmp, pad, pad);
     return true;
@@ -893,8 +913,8 @@
     isScanning = true;
 
     try {
-      // 1. EXP Bar
-      if (state.rois.exp && extractPreprocessedCanvas(state.rois.exp, $('cvsExp'))) {
+      // 1. EXP Bar (White text filter)
+      if (state.rois.exp && extractPreprocessedCanvas(state.rois.exp, $('cvsExp'), 'whiteText')) {
         const { data: { text } } = await ocrWorker.recognize($('cvsExp'));
         const clean = text.trim();
         const expMatch = clean.match(/([\d,]+)\s*[\[\(]?\s*(\d{1,2}\.\d{1,2})%?/);
@@ -923,7 +943,7 @@
       }
 
       // 2. Inventory Mesos
-      if (state.rois.meso && extractPreprocessedCanvas(state.rois.meso, $('cvsMeso'))) {
+      if (state.rois.meso && extractPreprocessedCanvas(state.rois.meso, $('cvsMeso'), 'auto')) {
         const { data: { text } } = await ocrWorker.recognize($('cvsMeso'));
         const digits = text.replace(/[^\d]/g, '');
         if (digits.length > 0) {
@@ -941,11 +961,13 @@
               state.lastMeso = parsedMeso;
             }
           }
+        } else {
+          $('readMeso').textContent = `Raw: "${text.trim() || 'none'}"`;
         }
       }
 
-      // 3. Potion Slots
-      if (state.rois.pot1 && extractPreprocessedCanvas(state.rois.pot1, $('cvsPot1'))) {
+      // 3. Potion Slots (Pure white stack digits filter)
+      if (state.rois.pot1 && extractPreprocessedCanvas(state.rois.pot1, $('cvsPot1'), 'whiteText')) {
         const { data: { text } } = await ocrWorker.recognize($('cvsPot1'));
         const digits = text.replace(/[^\d]/g, '');
         if (digits.length > 0) {
@@ -957,10 +979,12 @@
             }
             state.lastPot1 = count;
           }
+        } else {
+          $('readPot1').textContent = `Raw: "${text.trim() || 'none'}"`;
         }
       }
 
-      if (state.rois.pot2 && extractPreprocessedCanvas(state.rois.pot2, $('cvsPot2'))) {
+      if (state.rois.pot2 && extractPreprocessedCanvas(state.rois.pot2, $('cvsPot2'), 'whiteText')) {
         const { data: { text } } = await ocrWorker.recognize($('cvsPot2'));
         const digits = text.replace(/[^\d]/g, '');
         if (digits.length > 0) {
@@ -972,6 +996,8 @@
             }
             state.lastPot2 = count;
           }
+        } else {
+          $('readPot2').textContent = `Raw: "${text.trim() || 'none'}"`;
         }
       }
 
