@@ -197,18 +197,15 @@
     .s-lbl { font-size: 0.76rem; color: var(--muted); }
     .s-val { font-family: monospace; font-weight: 700; font-size: 0.92rem; color: var(--text); }
 
-    /* Quickslot Grid (8 or 12 slots) */
+    /* Quickslot Grid (Always 4 columns: 4x2 for 8 slots, 4x3 for 12 slots) */
     .qs-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 10px;
       margin-top: 10px;
     }
-    .qs-grid.cols-6 {
-      grid-template-columns: repeat(6, 1fr);
-    }
     @media (max-width: 900px) {
-      .qs-grid, .qs-grid.cols-6 { grid-template-columns: repeat(2, 1fr); }
+      .qs-grid { grid-template-columns: repeat(2, 1fr); }
     }
     .qs-card {
       background: var(--panel-alt);
@@ -387,7 +384,7 @@
         <div>
           <h2>Quickslot Potions</h2>
           <p style="font-size:0.78rem; color:var(--muted); margin-top:2px;">
-            Automatically reads your 8- or 12-slot panel. Select a potion type for each tracked slot; leave skills and empty slots as <strong>Not tracked</strong>.
+            Automatically reads your 8-slot (4×2) or 12-slot (4×3) panel. Select a potion type for each tracked slot; leave skills and empty slots as <strong>Not tracked</strong>.
           </p>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
@@ -437,7 +434,6 @@
   const overlayCanvas = $('overlayCanvas');
   const oCtx = overlayCanvas.getContext('2d', { willReadFrequently: true });
 
-  // Offscreen work canvas for full-resolution pixel scanning
   const workCanvas = document.createElement('canvas');
   const wCtx = workCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -450,7 +446,7 @@
     }
   }
 
-  // --- Preset MapleStory Classic Potions (MeowDB / Classic NPC Prices) ---
+  // --- Preset MapleStory Classic Potions ---
   const POTION_PRESETS = [
     { id: 'none',       name: 'Not tracked',        cost: 0 },
     { id: 'ginger_ale', name: 'Ginger Ale (HP+MP)', cost: 3800 },
@@ -465,144 +461,23 @@
     { id: 'custom',     name: 'Custom Price...',    cost: 1000 }
   ];
 
-  // --- MapleStory Classic 5x7 Bitmap Font Templates (1 = white text pixel, 0 = background) ---
-  // Normalized binary templates for MapleStory Classic's crisp HUD bitmap digits
+  // --- MapleStory Classic 5x7 Bitmap Font Templates ---
   const GLYPH_TEMPLATES = {
-    '0': [
-      '01110',
-      '10001',
-      '10011',
-      '10101',
-      '11001',
-      '10001',
-      '01110'
-    ],
-    '1': [
-      '00100',
-      '01100',
-      '00100',
-      '00100',
-      '00100',
-      '00100',
-      '01110'
-    ],
-    '2': [
-      '01110',
-      '10001',
-      '00001',
-      '00110',
-      '01000',
-      '10000',
-      '11111'
-    ],
-    '3': [
-      '01110',
-      '10001',
-      '00001',
-      '00110',
-      '00001',
-      '10001',
-      '01110'
-    ],
-    '4': [
-      '00010',
-      '00110',
-      '01010',
-      '10010',
-      '11111',
-      '00010',
-      '00010'
-    ],
-    '5': [
-      '11111',
-      '10000',
-      '11110',
-      '00001',
-      '00001',
-      '10001',
-      '01110'
-    ],
-    '6': [
-      '01110',
-      '10000',
-      '11110',
-      '10001',
-      '10001',
-      '10001',
-      '01110'
-    ],
-    '7': [
-      '11111',
-      '00001',
-      '00010',
-      '00100',
-      '01000',
-      '01000',
-      '01000'
-    ],
-    '8': [
-      '01110',
-      '10001',
-      '10001',
-      '01110',
-      '10001',
-      '10001',
-      '01110'
-    ],
-    '9': [
-      '01110',
-      '10001',
-      '10001',
-      '01111',
-      '00001',
-      '00010',
-      '01100'
-    ],
-    '.': [
-      '0',
-      '0',
-      '0',
-      '0',
-      '0',
-      '1',
-      '1'
-    ],
-    ',': [
-      '00',
-      '00',
-      '00',
-      '00',
-      '00',
-      '01',
-      '10'
-    ],
-    '%': [
-      '11001',
-      '11010',
-      '00100',
-      '00100',
-      '01011',
-      '10011',
-      '00000'
-    ],
-    '[': [
-      '11',
-      '10',
-      '10',
-      '10',
-      '10',
-      '10',
-      '11'
-    ],
-    ']': [
-      '11',
-      '01',
-      '01',
-      '01',
-      '01',
-      '01',
-      '11'
-    ]
+    '0': ['01110','10001','10011','10101','11001','10001','01110'],
+    '1': ['00100','01100','00100','00100','00100','00100','01110'],
+    '2': ['01110','10001','00001','00110','01000','10000','11111'],
+    '3': ['01110','10001','00001','00110','00001','10001','01110'],
+    '4': ['00010','00110','01010','10010','11111','00010','00010'],
+    '5': ['11111','10000','11110','00001','00001','10001','01110'],
+    '6': ['01110','10000','11110','10001','10001','10001','01110'],
+    '7': ['11111','00001','00010','00100','01000','01000','01000'],
+    '8': ['01110','10001','10001','01110','10001','10001','01110'],
+    '9': ['01110','10001','10001','01111','00001','00010','01100'],
+    '.': ['0','0','0','0','0','1','1'],
+    ',': ['00','00','00','00','00','01','10'],
+    '%': ['11001','11010','00100','00100','01011','10011','00000'],
+    '[': ['11','10','10','10','10','10','11'],
+    ']': ['11','01','01','01','01','01','11']
   };
 
   // --- App State ---
@@ -620,12 +495,12 @@
     grossMesoGained: 0,
     manualMesoOffset: 0,
 
-    slotCount: safeLoad('ms_slotCount', 8), // 8 (4x2) or 12 (6x2)
-    slotConfig: safeLoad('ms_slotConfig', {}), // { "8_0": { preset: "ginger_ale", cost: 3800 }, ... }
-    slotLive: {}, // { 0: { count: 59, lastCount: 59, used: 0 }, ... }
+    slotCount: safeLoad('ms_slotCount', 8), // 8 (4x2) or 12 (4x3)
+    slotConfig: safeLoad('ms_slotConfig', {}),
+    slotLive: {},
 
     hudOffset: safeLoad('ms_hudOffset', { dx: 0, dy: 0 }),
-    detectedAnchor: null, // { clientX, clientY, clientW, clientH, expRect, qsRect }
+    detectedAnchor: null,
     detectedInvRect: null,
 
     logs: safeLoad('ms_logs', [])
@@ -675,15 +550,21 @@
     scanFrame();
   });
 
-  // --- Toggle 8 vs 12 Quickslots ---
+  // --- Toggle 8 (4x2) vs 12 (4x3) Quickslots ---
+  function updateSlotToggleLabel() {
+    $('btnToggleSlots').textContent = state.slotCount === 8
+      ? 'Layout: 8 Slots (4×2)'
+      : 'Layout: 12 Slots (4×3)';
+  }
+  updateSlotToggleLabel();
+
   $('btnToggleSlots').addEventListener('click', () => {
     state.slotCount = state.slotCount === 8 ? 12 : 8;
     localStorage.setItem('ms_slotCount', JSON.stringify(state.slotCount));
-    $('btnToggleSlots').textContent = state.slotCount === 8 ? 'Layout: 8 Slots (4×2)' : 'Layout: 12 Slots (6×2)';
+    updateSlotToggleLabel();
     renderQuickslotCards();
     scanFrame();
   });
-  $('btnToggleSlots').textContent = state.slotCount === 8 ? 'Layout: 8 Slots (4×2)' : 'Layout: 12 Slots (6×2)';
 
   $('btnResetPotUsage').addEventListener('click', () => {
     for (const k of Object.keys(state.slotLive)) {
@@ -694,14 +575,14 @@
     renderQuickslotCards();
   });
 
-  // --- Build Quickslot UI Cards ---
+  // --- Build Quickslot UI Cards (Always 4 columns: 4x2 or 4x3) ---
   function renderQuickslotCards() {
     const grid = $('quickslotGrid');
-    grid.className = 'qs-grid' + (state.slotCount === 12 ? ' cols-6' : '');
+    grid.className = 'qs-grid';
     grid.innerHTML = '';
 
     const keyLabels8  = ['Shift', 'Ins', 'Home', 'PgUp', 'Ctrl', 'Del', 'End', 'PgDn'];
-    const keyLabels12 = ['Shift', 'Ins', 'Home', 'PgUp', 'Q', 'W', 'Ctrl', 'Del', 'End', 'PgDn', 'E', 'R'];
+    const keyLabels12 = ['1 / Q', '2 / W', '3 / E', '4 / R', 'Shift', 'Ins', 'Home', 'PgUp', 'Ctrl', 'Del', 'End', 'PgDn'];
     const labels = state.slotCount === 12 ? keyLabels12 : keyLabels8;
 
     for (let i = 0; i < state.slotCount; i++) {
@@ -754,29 +635,25 @@
   }
   renderQuickslotCards();
 
-  // --- Bitmap Font Reader (Zero-Tesseract Exact Pixel Segmenter & Template Matcher) ---
+  // --- Bitmap Font Reader ---
   function readMapleBitmapText(imgData, mode = 'white') {
     const { width: w, height: h, data: d } = imgData;
-    // 1. Build binary grid (1 = ink, 0 = background)
     const bin = new Uint8Array(w * h);
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const idx = (y * w + x) * 4;
         const r = d[idx], g = d[idx + 1], b = d[idx + 2];
         if (mode === 'white') {
-          // MapleStory white HUD text: high brightness & low saturation
           const minC = Math.min(r, g, b);
           const maxC = Math.max(r, g, b);
           bin[y * w + x] = (minC > 165 && (maxC - minC) < 45) ? 1 : 0;
         } else {
-          // MapleStory dark text on light grey inventory meso field
           const lum = r * 0.299 + g * 0.587 + b * 0.114;
           bin[y * w + x] = lum < 115 ? 1 : 0;
         }
       }
     }
 
-    // 2. Find vertical ink span (the 7px character row)
     let bestRow = -1, maxRowInk = 0;
     for (let y = 0; y < h; y++) {
       let rowInk = 0;
@@ -788,7 +665,6 @@
     }
     if (bestRow < 0 || maxRowInk === 0) return '';
 
-    // Expand vertically around bestRow to capture full glyph height (up to 9px)
     let yTop = bestRow, yBot = bestRow;
     while (yTop > 0 && (bestRow - yTop) < 6) {
       let ink = 0;
@@ -805,7 +681,6 @@
     const glyphH = yBot - yTop + 1;
     if (glyphH < 4 || glyphH > 12) return '';
 
-    // 3. Segment characters horizontally by empty columns
     const chars = [];
     let inChar = false, xStart = 0;
     for (let x = 0; x <= w; x++) {
@@ -825,7 +700,6 @@
       }
     }
 
-    // 4. Match each segmented character against MapleStory bitmap templates
     let result = '';
     let prevX1 = null;
 
@@ -838,7 +712,6 @@
       const cw = box.x1 - box.x0 + 1;
       const ch = box.y1 - box.y0 + 1;
 
-      // Quick punctuation checks
       if (cw <= 2 && ch <= 3) {
         result += '.';
         continue;
@@ -878,11 +751,10 @@
     return result.trim();
   }
 
-  // --- Automatic Bottom HUD & Quickslot Anchor Detector ---
+  // --- Automatic Bottom HUD & 4x2 / 4x3 Quickslot Anchor Detector ---
   function detectBottomHud(w, h, data) {
-    // 1. Scan bottom 15% of captured window for MapleStory's bright yellow EXP bar fill or gold EXP badge
     const yStart = Math.floor(h * 0.82);
-    let yellowMinX = w, yellowMaxX = 0, yellowY = -1, yellowCount = 0;
+    let yellowMinX = w, yellowMaxX = 0, yellowCount = 0;
 
     for (let y = yStart; y < h; y++) {
       let rowYellow = 0;
@@ -890,7 +762,6 @@
       for (let x = Math.floor(w * 0.25); x < Math.floor(w * 0.75); x++) {
         const i = (y * w + x) * 4;
         const r = data[i], g = data[i + 1], b = data[i + 2];
-        // Bright yellow/gold EXP badge or filled EXP gauge
         if (r > 210 && g > 175 && b < 70) {
           rowYellow++;
           if (x < rMinX) rMinX = x;
@@ -901,16 +772,12 @@
         yellowCount += rowYellow;
         if (rMinX < yellowMinX) yellowMinX = rMinX;
         if (rMaxX > yellowMaxX) yellowMaxX = rMaxX;
-        yellowY = y;
       }
     }
 
-    // 2. Detect Windows title bar & client content bounds
-    // MapleStory Classic windowed client is standard 4:3 or 16:9 inside a Windows title bar (~26-32px tall)
     let titleBarH = 0;
     for (let y = 0; y < Math.min(50, h); y++) {
       const i = (y * w + Math.floor(w * 0.5)) * 4;
-      // Windows 10/11 white/dark title bar transitions into dark/colored game frame
       if (data[i] < 40 && data[i + 1] < 40 && data[i + 2] < 40 && y > 18) {
         titleBarH = y;
         break;
@@ -922,12 +789,8 @@
 
     const clientH = h - titleBarH;
     const clientW = w;
-
-    // 3. Compute exact EXP text box & Quickslot grid rectangles anchored to bottom HUD
-    // In MapleStory Classic, the bottom HUD bar is fixed-height (68px) centered or full-width at client bottom
     const hudTop = titleBarH + clientH - 68 + state.hudOffset.dy;
 
-    // Locate EXP label anchor horizontally (around center-right of status bar)
     const expLabelX = (yellowCount > 10 && yellowMinX < w * 0.55)
       ? yellowMinX + 26 + state.hudOffset.dx
       : Math.floor(clientW * 0.445) + state.hudOffset.dx;
@@ -939,16 +802,17 @@
       h: 16
     };
 
-    // Quickslot grid sits immediately to the right of the main status buttons (or anchored to right HUD edge)
-    const cols = state.slotCount === 12 ? 6 : 4;
+    // Always 4 columns; 2 rows (8 slots) or 3 rows (12 slots expanding upward by 1 row)
+    const cols = 4;
+    const rows = state.slotCount === 12 ? 3 : 2;
     const slotW = 35;
     const slotH = 34;
     const gridW = cols * slotW;
-    const gridH = 2 * slotH;
+    const gridH = rows * slotH;
 
-    // Anchor quickslot panel right after the blue/orange menu buttons on the status bar
     const qsStartX = Math.floor(clientW * 0.728) + state.hudOffset.dx;
-    const qsStartY = hudTop + 1;
+    // When 12 slots (4x3) are active, the extra row sits 34px above the standard 2-row quickslot bar
+    const qsStartY = (rows === 3 ? hudTop - slotH : hudTop) + 1;
 
     const qsRect = {
       x: Math.max(0, qsStartX),
@@ -956,6 +820,7 @@
       w: gridW,
       h: gridH,
       cols,
+      rows,
       slotW,
       slotH
     };
@@ -965,19 +830,14 @@
 
   // --- Automatic "ITEM INVENTORY" Window Detector ---
   function detectInventoryWindow(w, h, data) {
-    // MapleStory's "ITEM INVENTORY" window has a distinct blue header bar (~172px wide)
-    // and a light-grey (#EEEEEE / RGB ~238,238,238) MESO box near its bottom
     const invW = 172;
     const invH = 293;
 
-    // Scan in 4px steps for the distinctive blue inventory title bar
     for (let y = 30; y < h - invH; y += 4) {
       for (let x = 10; x < w - invW; x += 4) {
         const i = (y * w + x + 40) * 4;
         const r = data[i], g = data[i + 1], b = data[i + 2];
-        // MapleStory Classic UI window blue header bar
         if (b > 175 && g > 110 && g < 185 && r < 95) {
-          // Verify light-grey MESO field 256px below this header
           const mY = y + 256;
           const mX = x + 65;
           if (mY < h && mX < w) {
@@ -1015,17 +875,14 @@
     wCtx.drawImage(video, 0, 0, vw, vh);
     const fullImg = wCtx.getImageData(0, 0, vw, vh);
 
-    // 1. Auto-detect bottom HUD & Quickslots
     const hud = detectBottomHud(vw, vh, fullImg.data);
     state.detectedAnchor = hud;
     $('detectedRes').textContent = `Client: ${hud.clientW}×${hud.clientH} (Auto-Locked)`;
 
-    // 2. Auto-detect Inventory window if currently open
     const inv = detectInventoryWindow(vw, vh, fullImg.data);
     state.detectedInvRect = inv;
     $('invStatusTag').textContent = inv ? 'Inv: Open (Synced)' : 'Inv: Closed';
 
-    // 3. Draw live preview + green/blue detection overlays
     overlayCanvas.width = vw;
     overlayCanvas.height = vh;
     oCtx.drawImage(workCanvas, 0, 0);
@@ -1035,12 +892,12 @@
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h);
 
-    // Quickslot Grid Overlay
+    // Quickslot Grid Overlay (4x2 or 4x3)
     oCtx.strokeStyle = '#22c55e';
     oCtx.lineWidth = 2;
     oCtx.strokeRect(hud.qsRect.x, hud.qsRect.y, hud.qsRect.w, hud.qsRect.h);
 
-    // Inventory Meso Overlay (if open)
+    // Inventory Meso Overlay
     if (inv) {
       oCtx.strokeStyle = '#f59e0b';
       oCtx.lineWidth = 2;
@@ -1048,7 +905,7 @@
       oCtx.strokeRect(inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h);
     }
 
-    // 4. Read EXP Bar via Bitmap Reader
+    // Read EXP Bar
     const expCrop = $('cropExp');
     expCrop.width = hud.expRect.w;
     expCrop.height = hud.expRect.h;
@@ -1084,7 +941,7 @@
       $('readExp').textContent = `Detected: "${rawExpStr}"`;
     }
 
-    // 5. Read Inventory Mesos if Inventory window is open
+    // Read Inventory Mesos
     if (inv) {
       const mesoCrop = $('cropMeso');
       mesoCrop.width = inv.mesoRect.w;
@@ -1116,7 +973,7 @@
       }
     }
 
-    // 6. Read All 8 or 12 Quickslots Automatically
+    // Read All 8 (4x2) or 12 (4x3) Quickslots
     for (let i = 0; i < state.slotCount; i++) {
       const col = i % hud.qsRect.cols;
       const row = Math.floor(i / hud.qsRect.cols);
@@ -1128,7 +985,6 @@
         slotCanvas.getContext('2d').drawImage(workCanvas, sx, sy, 32, 32, 0, 0, 32, 32);
       }
 
-      // Bottom-left stack count region inside each 32x32 quickslot icon
       const numData = wCtx.getImageData(sx + 1, sy + 20, 24, 11);
       const rawCount = readMapleBitmapText(numData, 'white').replace(/[^\d]/g, '');
 
@@ -1157,7 +1013,6 @@
         if (cntEl) cntEl.textContent = count;
         if (usedEl) usedEl.textContent = `Used: ${state.slotLive[i].used}`;
       }
-      // Note: unreadable frames keep last count; missing digits are never treated as zero
     }
 
     updateUI();
@@ -1165,7 +1020,6 @@
 
   $('btnRescan').addEventListener('click', scanFrame);
 
-  // --- Manual Meso Adjustment ---
   $('btnAddMeso').addEventListener('click', () => {
     const val = parseInt($('manualMesoInput').value, 10);
     if (!isNaN(val)) {
@@ -1175,7 +1029,7 @@
     }
   });
 
-  // --- Screen Capture (Opens directly on Window tab) ---
+  // --- Screen Capture ---
   $('btnCapture').addEventListener('click', async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -1205,7 +1059,6 @@
     }
   });
 
-  // --- Background Web Worker Timer (Immune to background tab throttling) ---
   function startBackgroundTimer() {
     if (timerWorker) return;
     const blob = new Blob([`setInterval(() => postMessage('tick'), 1000);`], { type: 'application/javascript' });
@@ -1228,7 +1081,6 @@
     };
   }
 
-  // --- Modes ---
   function setMode(newMode) {
     state.mode = newMode;
     const badge = $('statusBadge');
@@ -1243,7 +1095,6 @@
   $('btnNpc').addEventListener('click', () => setMode('npc'));
   $('btnPause').addEventListener('click', () => setMode('paused'));
 
-  // --- Calculate Potion Burn Across All Tracked Quickslots ---
   function getTotalPotionBurn() {
     let totalCost = 0;
     let totalPots = 0;
@@ -1258,7 +1109,6 @@
     return { totalCost, totalPots };
   }
 
-  // --- Update KPIs & Floating Mini HUD ---
   function updateUI() {
     $('expClock').textContent = fmtTime(state.expSeconds);
     $('mesoClock').textContent = fmtTime(state.mesoSeconds);
@@ -1312,7 +1162,6 @@
     }
   }
 
-  // --- Floating Picture-in-Picture Mini HUD ---
   $('btnPip').addEventListener('click', async () => {
     if (pipWindow && !pipWindow.closed) {
       pipWindow.focus();
@@ -1371,7 +1220,6 @@
     }
   });
 
-  // --- Reset & Save Session ---
   function resetCurrentSession() {
     state.expSeconds = 0;
     state.mesoSeconds = 0;
@@ -1469,7 +1317,7 @@
         if (data.slotCount) {
           state.slotCount = data.slotCount;
           localStorage.setItem('ms_slotCount', JSON.stringify(state.slotCount));
-          $('btnToggleSlots').textContent = state.slotCount === 8 ? 'Layout: 8 Slots (4×2)' : 'Layout: 12 Slots (6×2)';
+          updateSlotToggleLabel();
         }
         if (data.slotConfig) {
           state.slotConfig = data.slotConfig;
