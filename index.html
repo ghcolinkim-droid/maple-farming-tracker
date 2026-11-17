@@ -27,7 +27,7 @@
       color: var(--text);
       line-height: 1.45;
       padding: 16px;
-      max-width: 1240px;
+      max-width: 1260px;
       margin: 0 auto;
     }
 
@@ -225,23 +225,27 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      gap: 8px;
       background: var(--panel-alt);
       border: 1px solid var(--border);
       border-radius: 7px;
       padding: 8px 10px;
       margin-bottom: 8px;
     }
-    .ocr-row canvas {
-      height: 36px;
-      max-width: 210px;
-      background: #fff;
+    .preview-pair {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .preview-pair canvas {
+      height: 34px;
+      max-width: 115px;
       border: 1px solid var(--border);
       border-radius: 4px;
       image-rendering: pixelated;
     }
-    .ocr-meta { font-size: 0.78rem; color: var(--muted); }
-    .ocr-read { font-weight: 700; color: var(--text); font-family: monospace; font-size: 0.92rem; }
+    .ocr-meta { font-size: 0.76rem; color: var(--muted); }
+    .ocr-read { font-weight: 700; color: var(--text); font-family: monospace; font-size: 0.9rem; }
 
     .form-grid {
       display: grid;
@@ -324,7 +328,7 @@
         <div class="card-head">
           <h2>2. Auto-Preset or Drag Boxes</h2>
           <div style="display:flex; gap:6px;">
-            <button id="btnPreset1366" class="sm green">⚡ Auto-Set 1366×768 HUD</button>
+            <button id="btnPreset1366" class="sm green">⚡ Snap to 1366×768 HUD</button>
             <button id="btnZoom" class="sm primary">🔍 Zoom 2.4x</button>
           </div>
         </div>
@@ -348,25 +352,30 @@
         </div>
         <div class="nudge-bar">
           <span>Fine-Tune Active Box:</span>
+          <button class="sm" data-nudge="dx:-2">←←</button>
           <button class="sm" data-nudge="dx:-1">←</button>
           <button class="sm" data-nudge="dx:1">→</button>
+          <button class="sm" data-nudge="dx:2">→→</button>
           <button class="sm" data-nudge="dy:-1">↑</button>
           <button class="sm" data-nudge="dy:1">↓</button>
-          <button class="sm" data-nudge="dw:1">+Width</button>
-          <button class="sm" data-nudge="dw:-1">-Width</button>
-          <button class="sm" data-nudge="dh:1">+Height</button>
-          <button class="sm" data-nudge="dh:-1">-Height</button>
+          <button class="sm" data-nudge="dw:2">+W</button>
+          <button class="sm" data-nudge="dw:-2">-W</button>
+          <button class="sm" data-nudge="dh:2">+H</button>
+          <button class="sm" data-nudge="dh:-2">-H</button>
         </div>
       </div>
 
       <div class="card">
-        <h2>Live Preprocessed OCR Reads (6x Upscaled)</h2>
+        <h2>Live Crop & OCR Previews (Raw vs Processed)</h2>
         <div class="ocr-row">
           <div>
             <div class="ocr-meta">EXP Digits</div>
             <div id="readExp" class="ocr-read">Waiting...</div>
           </div>
-          <canvas id="cvsExp"></canvas>
+          <div class="preview-pair">
+            <canvas id="rawExp" title="Raw Game Crop"></canvas>
+            <canvas id="cvsExp" title="OCR Input"></canvas>
+          </div>
         </div>
 
         <div class="ocr-row">
@@ -374,7 +383,10 @@
             <div class="ocr-meta">Inventory Mesos</div>
             <div id="readMeso" class="ocr-read">Waiting...</div>
           </div>
-          <canvas id="cvsMeso"></canvas>
+          <div class="preview-pair">
+            <canvas id="rawMeso" title="Raw Game Crop"></canvas>
+            <canvas id="cvsMeso" title="OCR Input"></canvas>
+          </div>
         </div>
 
         <div class="ocr-row">
@@ -382,7 +394,10 @@
             <div class="ocr-meta">HP Potion Count</div>
             <div id="readPot1" class="ocr-read">Waiting...</div>
           </div>
-          <canvas id="cvsPot1"></canvas>
+          <div class="preview-pair">
+            <canvas id="rawPot1" title="Raw Game Crop"></canvas>
+            <canvas id="cvsPot1" title="OCR Input"></canvas>
+          </div>
         </div>
 
         <div class="ocr-row">
@@ -390,11 +405,14 @@
             <div class="ocr-meta">MP Potion Count</div>
             <div id="readPot2" class="ocr-read">Waiting...</div>
           </div>
-          <canvas id="cvsPot2"></canvas>
+          <div class="preview-pair">
+            <canvas id="rawPot2" title="Raw Game Crop"></canvas>
+            <canvas id="cvsPot2" title="OCR Input"></canvas>
+          </div>
         </div>
 
         <p style="font-size:0.78rem; color:var(--muted); margin-top:8px; line-height:1.5;">
-          ⚡ Click <strong>1. Capture Maple Window</strong> → select your MapleStory window → click <strong>Auto-Set 1366×768 HUD</strong>. Use the <code>← → ↑ ↓</code> buttons if any box needs a 1–2px nudge.
+          👀 Look at the <strong>left color box</strong> in each row—it shows the exact live pixels inside your crop box so you can tell right away if the box is on the numbers!
         </p>
       </div>
     </div>
@@ -474,7 +492,6 @@
 
 <script>
 (() => {
-  // --- Safe localStorage Loader ---
   function safeLoadJson(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
@@ -484,7 +501,6 @@
     }
   }
 
-  // --- State ---
   const state = {
     mode: 'idle',
     expSeconds: 0,
@@ -514,7 +530,6 @@
   let isScanning = false;
   let pipWindow = null;
 
-  // --- DOM Helpers ---
   const $ = id => document.getElementById(id);
   const video = $('gameVideo');
   const stage = $('videoStage');
@@ -535,12 +550,13 @@
     return `${h}:${m}:${s}`;
   };
 
-  // --- 1-Click Auto-Preset for 1366x768 MapleStory Classic Windowed HUD ---
+  // --- Exact Pixel Coordinates Measured from Your 1366x768 Screenshot ---
   $('btnPreset1366').addEventListener('click', () => {
-    // Measured directly from your 1366x768 windowed screenshot proportions
-    state.rois.exp  = { x: 0.344, y: 0.892, w: 0.118, h: 0.025 };
-    state.rois.pot1 = { x: 0.843, y: 0.873, w: 0.023, h: 0.021 };
-    state.rois.pot2 = { x: 0.869, y: 0.873, w: 0.023, h: 0.021 };
+    // EXP numbers right after the "EXP" tag on the bottom status bar
+    state.rois.exp  = { x: 0.456, y: 0.922, w: 0.118, h: 0.025 };
+    // Top-row Quickslot #1 / #2 bottom-left stack digits
+    state.rois.pot1 = { x: 0.733, y: 0.892, w: 0.024, h: 0.022 };
+    state.rois.pot2 = { x: 0.759, y: 0.892, w: 0.024, h: 0.022 };
 
     localStorage.setItem('ms_rois', JSON.stringify(state.rois));
     renderRoiBoxes();
@@ -554,6 +570,7 @@
     $('btnZoom').textContent = state.isZoomed ? '🔍 Fit 1x' : '🔍 Zoom 2.4x';
     if (state.isZoomed) {
       viewport.scrollTop = viewport.scrollHeight;
+      viewport.scrollLeft = viewport.scrollWidth * 0.35;
     }
   });
 
@@ -814,7 +831,7 @@
     });
   }
 
-  // --- Screen Capture (Opens directly on Window tab without Chrome constraint errors) ---
+  // --- Screen Capture ---
   $('btnCapture').addEventListener('click', async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -864,8 +881,8 @@
   $('btnNpc').addEventListener('click', () => setMode('npc'));
   $('btnPause').addEventListener('click', () => setMode('paused'));
 
-  // --- Specialized Image Preprocessing ---
-  function extractPreprocessedCanvas(roi, targetCanvas, filterMode = 'auto') {
+  // --- Dual Raw + Processed Canvas Extraction ---
+  function extractPreprocessedCanvas(roi, rawCanvas, targetCanvas, filterMode = 'auto') {
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     if (!vw || !vh) return false;
@@ -878,6 +895,14 @@
     const scale = 6;
     const pad = 16;
 
+    // 1. Render raw zoomed color crop so user can verify box placement visually
+    rawCanvas.width = sw * scale;
+    rawCanvas.height = sh * scale;
+    const rCtx = rawCanvas.getContext('2d', { willReadFrequently: true });
+    rCtx.imageSmoothingEnabled = false;
+    rCtx.drawImage(video, sx, sy, sw, sh, 0, 0, rawCanvas.width, rawCanvas.height);
+
+    // 2. Render thresholded black-on-white image for Tesseract
     targetCanvas.width = sw * scale + pad * 2;
     targetCanvas.height = sh * scale + pad * 2;
 
@@ -885,39 +910,30 @@
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
 
-    const tmp = document.createElement('canvas');
-    tmp.width = sw * scale;
-    tmp.height = sh * scale;
-    const tCtx = tmp.getContext('2d', { willReadFrequently: true });
-    tCtx.imageSmoothingEnabled = false;
-    tCtx.drawImage(video, sx, sy, sw, sh, 0, 0, tmp.width, tmp.height);
-
-    const img = tCtx.getImageData(0, 0, tmp.width, tmp.height);
+    const img = rCtx.getImageData(0, 0, rawCanvas.width, rawCanvas.height);
     const d = img.data;
 
     if (filterMode === 'whiteText') {
+      // MapleStory white HUD text has high brightness across all RGB channels
       for (let i = 0; i < d.length; i += 4) {
-        const isWhiteDigit = d[i] > 165 && d[i + 1] > 165 && d[i + 2] > 165;
+        const sum = d[i] + d[i + 1] + d[i + 2];
+        const isWhiteDigit = sum > 510; // avg > 170 per channel
         const val = isWhiteDigit ? 0 : 255;
         d[i] = d[i + 1] = d[i + 2] = val;
       }
     } else {
-      let avgLum = 0;
+      // Inventory Meso: dark text on light grey box
       for (let i = 0; i < d.length; i += 4) {
-        avgLum += (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
-      }
-      avgLum /= (d.length / 4);
-      const darkBg = avgLum < 128;
-
-      for (let i = 0; i < d.length; i += 4) {
-        let lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-        if (darkBg) lum = 255 - lum;
-        const val = lum > 130 ? 255 : 0;
+        const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+        const val = lum < 125 ? 0 : 255;
         d[i] = d[i + 1] = d[i + 2] = val;
       }
     }
 
-    tCtx.putImageData(img, 0, 0);
+    const tmp = document.createElement('canvas');
+    tmp.width = rawCanvas.width;
+    tmp.height = rawCanvas.height;
+    tmp.getContext('2d').putImageData(img, 0, 0);
     ctx.drawImage(tmp, pad, pad);
     return true;
   }
@@ -929,7 +945,7 @@
 
     try {
       // 1. EXP Bar
-      if (state.rois.exp && extractPreprocessedCanvas(state.rois.exp, $('cvsExp'), 'whiteText')) {
+      if (state.rois.exp && extractPreprocessedCanvas(state.rois.exp, $('rawExp'), $('cvsExp'), 'whiteText')) {
         const { data: { text } } = await ocrWorker.recognize($('cvsExp'));
         const clean = text.trim();
         const expMatch = clean.match(/([\d,]+)\s*[\[\(]?\s*(\d{1,2}\.\d{1,2})%?/);
@@ -958,7 +974,7 @@
       }
 
       // 2. Inventory Mesos
-      if (state.rois.meso && extractPreprocessedCanvas(state.rois.meso, $('cvsMeso'), 'auto')) {
+      if (state.rois.meso && extractPreprocessedCanvas(state.rois.meso, $('rawMeso'), $('cvsMeso'), 'auto')) {
         const { data: { text } } = await ocrWorker.recognize($('cvsMeso'));
         const digits = text.replace(/[^\d]/g, '');
         if (digits.length > 0) {
@@ -982,7 +998,7 @@
       }
 
       // 3. Potion Slots
-      if (state.rois.pot1 && extractPreprocessedCanvas(state.rois.pot1, $('cvsPot1'), 'whiteText')) {
+      if (state.rois.pot1 && extractPreprocessedCanvas(state.rois.pot1, $('rawPot1'), $('cvsPot1'), 'whiteText')) {
         const { data: { text } } = await ocrWorker.recognize($('cvsPot1'));
         const digits = text.replace(/[^\d]/g, '');
         if (digits.length > 0) {
@@ -999,7 +1015,7 @@
         }
       }
 
-      if (state.rois.pot2 && extractPreprocessedCanvas(state.rois.pot2, $('cvsPot2'), 'whiteText')) {
+      if (state.rois.pot2 && extractPreprocessedCanvas(state.rois.pot2, $('rawPot2'), $('cvsPot2'), 'whiteText')) {
         const { data: { text } } = await ocrWorker.recognize($('cvsPot2'));
         const digits = text.replace(/[^\d]/g, '');
         if (digits.length > 0) {
