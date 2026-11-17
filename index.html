@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+html_content = r'''<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -251,10 +251,10 @@
     }
     .status-item canvas {
       height: 24px;
-      max-width: 205px;
+      max-width: 215px;
       border: 1px solid var(--border);
       border-radius: 3px;
-      image-rendering: auto;
+      image-rendering: pixelated;
       background: #fff;
     }
     .s-lbl { font-size: 0.72rem; color: var(--muted); }
@@ -435,7 +435,7 @@
         </span>
       </div>
       <div id="kpiTtl" class="kpi-value">--:--</div>
-      <div id="kpiCurrentExp" class="kpi-sub">0.00% · Current: 0 / 1,132,200 EXP</div>
+      <div id="kpiCurrentExp" class="kpi-sub">0.00% · Current: 0 / 1,276,340 EXP</div>
     </div>
 
     <div class="kpi-card">
@@ -512,7 +512,7 @@
         <div>
           <h2>Zero-click HUD landmark detector</h2>
           <p style="font-size:0.75rem; color:var(--muted); margin-top:2px;">
-            Locks onto Maple's centered 800px bottom dock (<strong>LV.</strong>, <strong>EXP</strong>, <strong>8/12 Quickslots</strong>), minimap title row, and open Inventory meso box.
+            Finds actual game window bounds (ignoring WGC padding/title bar) and anchors directly off the gold <strong>LV.</strong> &amp; <strong>EXP</strong> badges.
           </p>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
@@ -757,11 +757,11 @@
     slotConfig: safeLoad('ms_slotConfig_v2', {}),
     slotLive: {},
 
-    offsets: safeLoad('ms_offsets_v7', {
+    offsets: safeLoad('ms_offsets_v8', {
       exp: { dx: 0, dy: 0 },
       qs:  { dx: 0, dy: 0 }
     }),
-    customNorm: safeLoad('ms_customNorm_v5', {
+    customNorm: safeLoad('ms_customNorm_v6', {
       exp:  null,
       map:  null,
       meso: null,
@@ -1150,8 +1150,8 @@
   });
   window.addEventListener('resize', drawExpChart);
 
-  // --- Grayscale Contrast-Stretched OCR Reader ---
-  async function readLineGrayscale(srcCanvas, sx, sy, sw, sh, mode = 'white-on-dark', debugCanvasId = null, workerOverride = null) {
+  // --- Nearest-Neighbor Pixel-Crisp OCR Reader (Preserves 1:1 Ideal Ratio Bitmap Strokes) ---
+  async function readLinePixelCrisp(srcCanvas, sx, sy, sw, sh, mode = 'white-on-dark', debugCanvasId = null, workerOverride = null) {
     const activeWorker = workerOverride || ocrWorker;
     if (!activeWorker || sw <= 2 || sh <= 2) return '';
 
@@ -1169,7 +1169,7 @@
       if (lum > maxL) maxL = lum;
     }
 
-    const span = Math.max(25, maxL - minL);
+    const span = Math.max(30, maxL - minL);
     const tmp = document.createElement('canvas');
     tmp.width = sw;
     tmp.height = sh;
@@ -1179,7 +1179,8 @@
     for (let p = 0; p < sw * sh; p++) {
       let norm = ((lumArr[p] - minL) / span) * 255;
       let gray = mode === 'white-on-dark' ? (255 - norm) : norm;
-      gray = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 128));
+      // Crisp thresholding with clean anti-alias retention for 1:1 pixel fonts
+      gray = gray < 115 ? 0 : gray > 165 ? 255 : Math.round((gray - 115) * 5.1);
       tImg.data[p * 4] = gray;
       tImg.data[p * 4 + 1] = gray;
       tImg.data[p * 4 + 2] = gray;
@@ -1187,16 +1188,16 @@
     }
     tCtx.putImageData(tImg, 0, 0);
 
-    const scale = 3;
-    const pad = 12;
+    // Integer 4x nearest-neighbor upscale (NO blurry bicubic smoothing!)
+    const scale = 4;
+    const pad = 16;
     const uw = sw * scale;
     const uh = sh * scale;
     scaleCanvas.width = uw + pad * 2;
     scaleCanvas.height = uh + pad * 2;
     sCtx.fillStyle = '#ffffff';
     sCtx.fillRect(0, 0, scaleCanvas.width, scaleCanvas.height);
-    sCtx.imageSmoothingEnabled = true;
-    sCtx.imageSmoothingQuality = 'high';
+    sCtx.imageSmoothingEnabled = false;
     sCtx.drawImage(tmp, 0, 0, sw, sh, pad, pad, uw, uh);
 
     if (debugCanvasId && $(debugCanvasId)) {
@@ -1330,7 +1331,7 @@
 
     if (w > 0.008 && h > 0.006) {
       state.customNorm[state.drawTarget] = { x, y, w, h };
-      localStorage.setItem('ms_customNorm_v5', JSON.stringify(state.customNorm));
+      localStorage.setItem('ms_customNorm_v6', JSON.stringify(state.customNorm));
       if (state.drawTarget === 'qs') state.slotModeManual = true;
       updateModeBadges();
     }
@@ -1346,7 +1347,7 @@
     btn.addEventListener('click', () => {
       const [target, axis, valStr] = btn.dataset.nudge.split(':');
       state.offsets[target][axis] += parseInt(valStr, 10);
-      localStorage.setItem('ms_offsets_v7', JSON.stringify(state.offsets));
+      localStorage.setItem('ms_offsets_v8', JSON.stringify(state.offsets));
       scanFrame();
     });
   });
@@ -1355,8 +1356,8 @@
     state.offsets = { exp: { dx: 0, dy: 0 }, qs: { dx: 0, dy: 0 } };
     state.customNorm = { exp: null, map: null, meso: null, qs: null };
     state.slotModeManual = false;
-    localStorage.setItem('ms_offsets_v7', JSON.stringify(state.offsets));
-    localStorage.setItem('ms_customNorm_v5', JSON.stringify(state.customNorm));
+    localStorage.setItem('ms_offsets_v8', JSON.stringify(state.offsets));
+    localStorage.setItem('ms_customNorm_v6', JSON.stringify(state.customNorm));
     updateModeBadges();
     scanFrame(true);
   });
@@ -1463,7 +1464,78 @@
   }
   renderQuickslotCards();
 
-  // --- Centered 800px Bottom-Dock Quickslot Detector (Auto 8 vs 12 Slots) ---
+  // --- Detect Actual Non-Black Game Window Bounds (Handles WGC Padding & Windows Title Bar) ---
+  function detectGameBounds(w, h, data) {
+    let contentLeft = 0;
+    let contentRight = w - 1;
+    let contentBottom = h - 1;
+    let contentTop = 0;
+
+    // Trim any pure-black WGC texture padding on the right or bottom
+    const midY = Math.floor(h * 0.5);
+    while (contentRight > 640) {
+      const i = (midY * w + contentRight) * 4;
+      const i2 = (Math.floor(h * 0.25) * w + contentRight) * 4;
+      const i3 = (Math.floor(h * 0.75) * w + contentRight) * 4;
+      if (data[i] + data[i + 1] + data[i + 2] > 6 ||
+          data[i2] + data[i2 + 1] + data[i2 + 2] > 6 ||
+          data[i3] + data[i3 + 1] + data[i3 + 2] > 6) {
+        break;
+      }
+      contentRight--;
+    }
+
+    const midX = Math.floor((contentLeft + contentRight) * 0.5);
+    while (contentBottom > 480) {
+      const i = (contentBottom * w + midX) * 4;
+      const i2 = (contentBottom * w + Math.floor(contentRight * 0.25)) * 4;
+      const i3 = (contentBottom * w + Math.floor(contentRight * 0.75)) * 4;
+      if (data[i] + data[i + 1] + data[i + 2] > 6 ||
+          data[i2] + data[i2 + 1] + data[i2 + 2] > 6 ||
+          data[i3] + data[i3 + 1] + data[i3 + 2] > 6) {
+        break;
+      }
+      contentBottom--;
+    }
+
+    // Detect Windows title bar height (bright white/light-grey strip at y = 0..34)
+    let titleBarRows = 0;
+    for (let y = 0; y < Math.min(42, contentBottom); y++) {
+      let brightCount = 0;
+      for (let x = contentLeft + 20; x < contentLeft + 300; x += 4) {
+        const i = (y * w + x) * 4;
+        if (data[i] > 235 && data[i + 1] > 235 && data[i + 2] > 235) brightCount++;
+      }
+      if (brightCount >= 55) titleBarRows = y + 1;
+      else if (titleBarRows > 15) break;
+    }
+    if (titleBarRows >= 18) {
+      contentTop = titleBarRows;
+    }
+
+    // Account for ~7px Windows DWM bottom/left resize border if present
+    const rawW = contentRight - contentLeft + 1;
+    const rawH = contentBottom - contentTop + 1;
+    if (rawW >= 1366 && rawW <= 1386) {
+      const padX = Math.floor((rawW - 1366) / 2);
+      contentLeft += padX;
+      contentRight = contentLeft + 1365;
+    }
+    if (rawH > 768 && rawH <= 785) {
+      contentBottom = contentTop + 767;
+    }
+
+    return {
+      gameLeft: contentLeft,
+      gameRight: contentRight,
+      gameTop: contentTop,
+      gameBottom: contentBottom,
+      clientW: contentRight - contentLeft + 1,
+      clientH: contentBottom - contentTop + 1
+    };
+  }
+
+  // --- Centered 800px Bottom-Dock Quickslot Detector ---
   function findQuickslotPanel(w, h, data, dockLeft, dockRight, gameBottom) {
     const cols = 4;
     const slotW = 35;
@@ -1511,7 +1583,6 @@
       return (borderHits * 3 + brightKeybindHits * 2) / (cols * rows);
     };
 
-    // Auto-detect whether 2 rows (8 slots) or 3 rows (12 slots) is present on the bottom dock
     if (!state.slotModeManual) {
       const score2 = scoreCandidate(anchorRightX, anchorBottomY - 2 * slotH, 2);
       const score3 = scoreCandidate(anchorRightX, anchorBottomY - 3 * slotH, 3);
@@ -1558,35 +1629,10 @@
     };
   }
 
-  // --- ZERO-CLICK LANDMARK HUD DETECTOR (Centered 800px Dock + Minimap Title Row) ---
+  // --- ZERO-CLICK LANDMARK HUD DETECTOR (Anchored directly to Gold LV. & EXP Badges) ---
   function detectBottomHud(w, h, data) {
-    let clientW = w;
-    let gameLeft = 0;
-    if (w >= 1366 && w <= 1388) {
-      clientW = 1366;
-      gameLeft = Math.floor((w - 1366) / 2);
-    } else if (w >= 1024 && w <= 1044) {
-      clientW = 1024;
-      gameLeft = Math.floor((w - 1024) / 2);
-    } else if (w >= 800 && w <= 820) {
-      clientW = 800;
-      gameLeft = Math.floor((w - 800) / 2);
-    }
-
-    let gameBottom = h - 1;
-    let gameTop = 0;
-    if (h > 768 && h <= 815) {
-      gameBottom = h - 8;
-      gameTop = Math.max(0, gameBottom - 767);
-    } else if (h > 600 && h <= 645) {
-      gameBottom = h - 8;
-      gameTop = Math.max(0, gameBottom - 599);
-    }
-
-    // In 1366x768 & 1024x768 widescreen, MapleStory centers its 800px bottom status/quickslot dock
-    const dockW = Math.min(clientW, 800);
-    const dockLeft = gameLeft + Math.floor((clientW - dockW) / 2);
-    const dockRight = dockLeft + dockW;
+    const bounds = detectGameBounds(w, h, data);
+    const { gameLeft, gameTop, gameBottom, clientW } = bounds;
 
     const isGoldBadgePixel = (x, y) => {
       if (x < 0 || y < 0 || x >= w || y >= h) return false;
@@ -1595,24 +1641,30 @@
       return r > 205 && g > 165 && b < 85 && (r - b) > 125;
     };
 
-    // 1. Auto-Detect Character Level Badge ("LV." at left side of centered 800px dock)
-    let levelRect = null;
-    const lvX0 = dockLeft + 4;
-    const lvX1 = dockLeft + 95;
-    const lvY0 = Math.max(0, gameBottom - 30);
-    const lvY1 = Math.max(0, gameBottom - 3);
-    let lvMaxX = -1, lvSumY = 0, lvHits = 0;
+    // 1. Find the Gold "LV." Badge across the lower status bar to lock the exact 800px dock origin
+    const dockW = Math.min(clientW, 800);
+    let dockLeft = gameLeft + Math.floor((clientW - dockW) / 2);
 
-    for (let y = lvY0; y <= lvY1; y++) {
-      for (let x = lvX0; x <= lvX1; x++) {
+    let levelRect = null;
+    const lvSearchX0 = Math.max(0, dockLeft - 45);
+    const lvSearchX1 = Math.min(w - 1, dockLeft + 110);
+    const lvSearchY0 = Math.max(0, gameBottom - 30);
+    const lvSearchY1 = Math.max(0, gameBottom - 3);
+
+    let lvMinX = lvSearchX1, lvMaxX = -1, lvSumY = 0, lvHits = 0;
+    for (let y = lvSearchY0; y <= lvSearchY1; y++) {
+      for (let x = lvSearchX0; x <= lvSearchX1; x++) {
         if (isGoldBadgePixel(x, y)) {
           lvHits++;
+          if (x < lvMinX) lvMinX = x;
           if (x > lvMaxX) lvMaxX = x;
           lvSumY += y;
         }
       }
     }
     if (lvHits >= 10 && lvMaxX > 0) {
+      // Refine dockLeft directly from the LV. badge's left edge!
+      dockLeft = Math.max(gameLeft, lvMinX - 8);
       const cy = Math.round(lvSumY / lvHits);
       levelRect = {
         x: Math.min(w - 38, lvMaxX + 2),
@@ -1621,8 +1673,9 @@
         h: 15
       };
     }
+    const dockRight = dockLeft + dockW;
 
-    // 2. Auto-Detect EXP Bar via Gold "EXP" Label on Centered Dock (Avoiding CASH SHOP icon at dockLeft+525)
+    // 2. Find Gold "EXP" Badge on the 800px Dock (Located at dockLeft + 402..435, well left of CASH SHOP at dockLeft + 522)
     let expRect;
     if (state.customNorm.exp) {
       const c = state.customNorm.exp;
@@ -1633,9 +1686,8 @@
         h: Math.round(c.h * h)
       };
     } else {
-      // On the 800px dock, "EXP" label sits at dockLeft + 390..435, and CASH SHOP starts after dockLeft + 518
-      const expSearchX0 = dockLeft + 380;
-      const expSearchX1 = dockLeft + 455;
+      const expSearchX0 = dockLeft + 390;
+      const expSearchX1 = dockLeft + 445;
       const expSearchY0 = Math.max(0, gameBottom - 20);
       const expSearchY1 = Math.max(0, gameBottom - 3);
 
@@ -1648,7 +1700,7 @@
           let hits = 0;
           let rightMost = x;
           for (let dy = 0; dy < 7; dy++) {
-            for (let dx = 0; dx < 20; dx++) {
+            for (let dx = 0; dx < 22; dx++) {
               if (isGoldBadgePixel(x + dx, y + dy)) {
                 hits++;
                 if (x + dx > rightMost) rightMost = x + dx;
@@ -1664,9 +1716,8 @@
       }
 
       if (bestClusterCount >= 10 && bestBadgeRightX > 0) {
-        // Start strictly AFTER the gold EXP badge so "EXP." isn't inside the OCR digits crop
         const scanX0 = bestBadgeRightX + 4;
-        const scanX1 = Math.min(dockLeft + 520, scanX0 + 115);
+        const scanX1 = Math.min(dockLeft + 518, scanX0 + 108);
         const scanY0 = Math.max(0, bestBadgeCenterY - 7);
         const scanY1 = Math.min(gameBottom, bestBadgeCenterY + 7);
 
@@ -1684,7 +1735,7 @@
         }
 
         const startX = tHits >= 8 ? Math.max(scanX0, minTX - 3) : scanX0 + 2;
-        const boxW = tHits >= 8 ? Math.min(115, Math.max(82, maxTX - startX + 6)) : 96;
+        const boxW = tHits >= 8 ? Math.min(108, Math.max(82, maxTX - startX + 6)) : 96;
         expRect = {
           x: Math.max(0, startX + state.offsets.exp.dx),
           y: Math.max(0, bestBadgeCenterY - 6 + state.offsets.exp.dy),
@@ -1693,15 +1744,15 @@
         };
       } else {
         expRect = {
-          x: Math.max(0, dockLeft + 416 + state.offsets.exp.dx),
+          x: Math.max(0, dockLeft + 426 + state.offsets.exp.dx),
           y: Math.max(0, gameBottom - 16 + state.offsets.exp.dy),
-          w: 98,
+          w: 94,
           h: 13
         };
       }
     }
 
-    // 3. Auto-Detect Minimap Map Name Row (Skipping top "MAP | WORLD" tab row at gameTop + 4..18)
+    // 3. Auto-Detect Minimap Map Name Row (Below the Windows title bar & below the "MAP | WORLD" strip)
     let mapRect;
     if (state.customNorm.map) {
       const m = state.customNorm.map;
@@ -1713,9 +1764,9 @@
       };
     } else {
       const mX0 = gameLeft + 34;
-      const mX1 = gameLeft + 260;
-      const mY0 = gameTop + 19; // Start below the "MAP | WORLD" tab bar
-      const mY1 = gameTop + 56;
+      const mX1 = gameLeft + 225;
+      const mY0 = gameTop + 21; // Skips the "MAP | WORLD" tab bar inside the game canvas
+      const mY1 = gameTop + 52;
 
       let bestRowY = -1;
       let bestRowScore = 0;
@@ -1742,7 +1793,7 @@
         }
 
         const span = rowMaxX - rowMinX;
-        if (whiteCount >= 10 && darkBgCount >= 55 && span >= 30 && span <= 210) {
+        if (whiteCount >= 8 && darkBgCount >= 45 && span >= 25 && span <= 185) {
           const score = whiteCount * 2 + darkBgCount;
           if (score > bestRowScore) {
             bestRowScore = score;
@@ -1756,26 +1807,26 @@
       if (bestRowY > 0) {
         mapRect = {
           x: Math.max(gameLeft + 34, bestRowMinX - 5),
-          y: Math.max(gameTop + 18, bestRowY - 7),
-          w: Math.min(220, Math.max(125, bestRowMaxX - bestRowMinX + 18)),
-          h: 16
+          y: Math.max(gameTop + 20, bestRowY - 7),
+          w: Math.min(190, Math.max(115, bestRowMaxX - bestRowMinX + 16)),
+          h: 15
         };
       } else {
         mapRect = {
-          x: gameLeft + 44,
-          y: gameTop + 23,
-          w: 195,
-          h: 16
+          x: gameLeft + 42,
+          y: gameTop + 24,
+          w: 175,
+          h: 15
         };
       }
     }
 
     const qsRect = findQuickslotPanel(w, h, data, dockLeft, dockRight, gameBottom);
-    return { clientW, gameBottom, levelRect, expRect, mapRect, qsRect };
+    return { bounds, levelRect, expRect, mapRect, qsRect };
   }
 
-  // --- Recessed Light-Grey / White Meso Box Detector (With Inventory Grid Verification) ---
-  function detectInventoryWindow(w, h, data) {
+  // --- Inventory Meso Box Detector (Fixed-Width Box Right of MESO Icon + Light Inventory Panel Check) ---
+  function detectInventoryWindow(w, h, data, bounds) {
     if (state.customNorm.meso) {
       const m = state.customNorm.meso;
       const mx = Math.round(m.x * w);
@@ -1795,11 +1846,16 @@
       if (px < 0 || py < 0 || px >= w || py >= h) return false;
       const i = (py * w + px) * 4;
       const r = data[i], g = data[i + 1], b = data[i + 2];
-      return r >= 198 && g >= 198 && b >= 198 && Math.abs(r - b) < 12;
+      return r >= 182 && g >= 182 && b >= 182 && Math.abs(r - b) < 16;
     };
 
-    for (let y = 210; y < h - 45; y += 2) {
-      for (let x = 25; x < w - 95; x += 2) {
+    const scanX0 = bounds.gameLeft + 25;
+    const scanX1 = bounds.gameRight - 95;
+    const scanY0 = bounds.gameTop + 160;
+    const scanY1 = bounds.gameBottom - 45;
+
+    for (let y = scanY0; y < scanY1; y += 2) {
+      for (let x = scanX0; x < scanX1; x += 2) {
         if (!isFieldBg(x, y) || isFieldBg(x - 2, y)) continue;
 
         let boxTop = y;
@@ -1811,31 +1867,24 @@
         const boxH = boxBottom - boxTop + 1;
         if (boxH < 11 || boxH > 19) continue;
 
-        const cleanRow = boxTop + 1;
         let boxLeft = x;
-        while (boxLeft > x - 12 && isFieldBg(boxLeft - 1, cleanRow)) boxLeft--;
+        while (boxLeft > x - 10 && isFieldBg(boxLeft - 1, boxTop + 1)) boxLeft--;
 
-        let boxRight = boxLeft;
-        while (boxRight < boxLeft + 98 && isFieldBg(boxRight + 1, cleanRow)) boxRight++;
-
-        const boxW = boxRight - boxLeft + 1;
-        if (boxW < 68 || boxW > 95) continue;
-
-        // Check gold MESO icon immediately left of the box
+        // Check gold MESO coin/label immediately left of the box
         let goldPixels = 0;
         for (let gy = boxTop - 1; gy <= boxBottom + 1; gy++) {
           for (let gx = boxLeft - 38; gx <= boxLeft - 3; gx++) {
             if (gx < 0 || gy < 0) continue;
             const gi = (gy * w + gx) * 4;
-            if (data[gi] > 180 && data[gi + 1] > 130 && data[gi + 2] < 95) goldPixels++;
+            if (data[gi] > 175 && data[gi + 1] > 125 && data[gi + 2] < 95) goldPixels++;
           }
         }
         if (goldPixels < 3) continue;
 
-        // Verify the white/light-grey Inventory Item Grid exists directly ABOVE the meso box
+        // Verify the light-grey Inventory Item Grid exists directly ABOVE the meso box
         const gridX0 = Math.max(0, boxLeft - 42);
-        const gridX1 = Math.min(w - 1, boxRight + 4);
-        const gridY0 = Math.max(0, boxTop - 195);
+        const gridX1 = Math.min(w - 1, boxLeft + 84);
+        const gridY0 = Math.max(0, boxTop - 185);
         const gridY1 = Math.max(0, boxTop - 12);
         let neutralLightHits = 0;
         let sampled = 0;
@@ -1844,13 +1893,15 @@
             sampled++;
             const gi = (gy * w + gx) * 4;
             const r = data[gi], g = data[gi + 1], b = data[gi + 2];
-            if (r > 185 && g > 185 && b > 185 && Math.max(r, g, b) - Math.min(r, g, b) < 18) {
+            if (r > 180 && g > 180 && b > 180 && Math.max(r, g, b) - Math.min(r, g, b) < 22) {
               neutralLightHits++;
             }
           }
         }
 
-        if (sampled > 0 && (neutralLightHits / sampled) >= 0.45) {
+        if (sampled > 0 && (neutralLightHits / sampled) >= 0.42) {
+          // Use fixed 84px inner field width so right-aligned digits never truncate the box!
+          const boxW = Math.min(84, bounds.gameRight - boxLeft - 4);
           return {
             winX: Math.max(0, boxLeft - 48),
             winY: Math.max(0, boxTop - 246),
@@ -1869,29 +1920,38 @@
     return null;
   }
 
-  // --- Robust EXP String Parser (Handles "814.307[63.80%]", "814,307 [63.80%]", "EXP. ...") ---
+  // --- Validated EXP String Parser (Cross-checks Integer EXP Against [XX.XX%]) ---
   function parseExpOcrText(rawExpStr, reqExp) {
-    if (!rawExpStr) return { exp: null, pct: null };
+    if (!rawExpStr) return { exp: null, pct: null, valid: false };
     const trimmed = rawExpStr.replace(/^[^\d]+/, '');
-    if (!trimmed) return { exp: null, pct: null };
+    if (!trimmed) return { exp: null, pct: null, valid: false };
 
     const bracketSplit = trimmed.split(/[\[\(]/);
     const leftDigits = (bracketSplit[0] || '').replace(/[^\d]/g, '');
-    if (!leftDigits) return { exp: null, pct: null };
+    if (!leftDigits) return { exp: null, pct: null, valid: false };
 
     const parsedExp = parseInt(leftDigits, 10);
-    if (isNaN(parsedExp)) return { exp: null, pct: null };
+    if (isNaN(parsedExp) || parsedExp < 0 || parsedExp > reqExp * 1.05) {
+      return { exp: null, pct: null, valid: false };
+    }
 
     let parsedPct = null;
     if (bracketSplit.length > 1) {
       const pctMatch = bracketSplit[1].match(/(\d{1,2}\.\d{1,2})/);
       if (pctMatch) parsedPct = parseFloat(pctMatch[1]);
     }
-    if (parsedPct === null || isNaN(parsedPct)) {
-      parsedPct = Math.min(99.99, (parsedExp / reqExp) * 100);
+
+    const expectedPct = Math.min(99.99, (parsedExp / reqExp) * 100);
+    if (parsedPct !== null && !isNaN(parsedPct)) {
+      // Cross-validate EXP integer vs percentage bracket to block single-frame OCR misreads
+      if (Math.abs(expectedPct - parsedPct) > 2.5) {
+        return { exp: parsedExp, pct: parsedPct, valid: false };
+      }
+    } else {
+      parsedPct = expectedPct;
     }
 
-    return { exp: parsedExp, pct: parsedPct };
+    return { exp: parsedExp, pct: parsedPct, valid: true };
   }
 
   function pushRecentCapture(expVal, pctVal) {
@@ -1932,7 +1992,7 @@
     const fullImg = wCtx.getImageData(0, 0, vw, vh);
 
     const hud = detectBottomHud(vw, vh, fullImg.data);
-    const inv = detectInventoryWindow(vw, vh, fullImg.data);
+    const inv = detectInventoryWindow(vw, vh, fullImg.data, hud.bounds);
     $('invStatusTag').textContent = inv ? 'Inv: Open (Synced)' : 'Inv: Closed';
 
     overlayCanvas.width = vw;
@@ -2030,7 +2090,7 @@
     try {
       // A0. Auto-Read Character Level on initial capture or every 15th cycle
       if (hud.levelRect && ocrWorker && (forceAllRead || scanCycle === 1 || scanCycle % 15 === 0)) {
-        const rawLvStr = await readLineGrayscale(
+        const rawLvStr = await readLinePixelCrisp(
           workCanvas,
           hud.levelRect.x, hud.levelRect.y, hud.levelRect.w, hud.levelRect.h,
           'white-on-dark',
@@ -2047,7 +2107,7 @@
 
       // A. Read Map Name
       if (mapOcrWorker && (forceAllRead || scanCycle === 1 || scanCycle % 3 === 0)) {
-        const rawMapStr = await readLineGrayscale(
+        const rawMapStr = await readLinePixelCrisp(
           workCanvas,
           hud.mapRect.x, hud.mapRect.y, hud.mapRect.w, hud.mapRect.h,
           'white-on-dark',
@@ -2071,7 +2131,7 @@
       }
 
       // B. Read EXP Bar
-      const rawExpStr = await readLineGrayscale(
+      const rawExpStr = await readLinePixelCrisp(
         workCanvas,
         hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h,
         'white-on-dark',
@@ -2080,9 +2140,9 @@
       );
 
       const reqExp = getExpToNextLevel(state.level);
-      const { exp: parsedExp, pct: parsedPct } = parseExpOcrText(rawExpStr, reqExp);
+      const { exp: parsedExp, pct: parsedPct, valid } = parseExpOcrText(rawExpStr, reqExp);
 
-      if (parsedExp !== null && !isNaN(parsedExp)) {
+      if (valid && parsedExp !== null) {
         $('readExp').textContent = `Lv.${state.level} · ${fmtNum(parsedExp)} [${parsedPct.toFixed(2)}%]`;
 
         if (state.mode === 'grinding') {
@@ -2137,7 +2197,7 @@
 
       // C. Read Inventory Mesos
       if (inv) {
-        const rawMesoStr = await readLineGrayscale(
+        const rawMesoStr = await readLinePixelCrisp(
           workCanvas,
           inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h,
           'dark-on-white',
@@ -2580,11 +2640,11 @@
         }
         if (data.offsets) {
           state.offsets = data.offsets;
-          localStorage.setItem('ms_offsets_v7', JSON.stringify(state.offsets));
+          localStorage.setItem('ms_offsets_v8', JSON.stringify(state.offsets));
         }
         if (data.customNorm) {
           state.customNorm = data.customNorm;
-          localStorage.setItem('ms_customNorm_v5', JSON.stringify(state.customNorm));
+          localStorage.setItem('ms_customNorm_v6', JSON.stringify(state.customNorm));
           updateModeBadges();
         }
         if (Array.isArray(data.logs)) {
@@ -2621,3 +2681,9 @@
 </script>
 </body>
 </html>
+'''
+
+with open('index.html', 'w', encoding='utf-8') as f:
+    f.write(html_content)
+
+print(f"Saved fixed index.html ({len(html_content)} bytes)")
