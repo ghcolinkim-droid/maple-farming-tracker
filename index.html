@@ -79,7 +79,7 @@
     button.red { background: rgba(239, 68, 68, 0.15); border-color: var(--red); color: var(--red); }
     button.purple { background: rgba(168, 85, 247, 0.15); border-color: var(--purple); color: #d8b4fe; }
     button.sm { padding: 4px 9px; font-size: 0.78rem; }
-    button.active-tool { outline: 2px solid #fff; }
+    button.active-tool { outline: 2px solid #fff; background: var(--accent); color: #fff; }
 
     .kpi-grid {
       display: grid;
@@ -188,18 +188,24 @@
       border-radius: 7px;
       padding: 9px 12px;
     }
+    .ocr-pair {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 3px;
+    }
     .status-item canvas {
-      height: 28px;
+      height: 24px;
       max-width: 195px;
       border: 1px solid var(--border);
-      border-radius: 4px;
+      border-radius: 3px;
       image-rendering: pixelated;
-      background: #000;
+      background: #fff;
     }
-    .s-lbl { font-size: 0.76rem; color: var(--muted); }
+    .s-lbl { font-size: 0.74rem; color: var(--muted); }
     .s-val { font-family: monospace; font-weight: 700; font-size: 0.92rem; color: var(--text); }
 
-    /* Quickslot Potions Grid (4x3 12-Slot Layout matching Maple Track) */
+    /* Quickslot Potions Grid (4x3 12-Slot Layout) */
     .qs-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -228,13 +234,23 @@
       justify-content: space-between;
       gap: 8px;
     }
+    .qs-thumbs {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
     .qs-top canvas {
-      width: 38px;
-      height: 38px;
+      width: 36px;
+      height: 36px;
       border: 1px solid var(--border);
       border-radius: 5px;
       image-rendering: pixelated;
       background: #000;
+    }
+    .qs-top canvas.ocr-bin {
+      width: 44px;
+      height: 22px;
+      background: #fff;
     }
     .qs-title {
       font-size: 0.78rem;
@@ -351,12 +367,13 @@
   <div id="tab-live" class="tab-panel active">
     <div class="card">
       <div class="card-head">
-        <h2>Automatic HUD & Inventory Detection</h2>
+        <h2>Latest game capture & OCR calibration</h2>
         <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
           <span id="detectedRes" style="font-size:0.78rem; color:var(--muted);">OCR Engine: Loading...</span>
-          <button id="btnDrawExp" class="sm">✏️ Drag EXP Box</button>
-          <button id="btnDrawQs" class="sm">✏️ Drag Quickslots</button>
-          <button id="btnRescan" class="sm green">🔍 Rescan Now</button>
+          <button id="btnDrawExp" class="sm">Select EXP readout</button>
+          <button id="btnDrawMeso" class="sm">Select meso amount</button>
+          <button id="btnDrawQs" class="sm">Select quickslots</button>
+          <button id="btnRescan" class="sm green">Read frame</button>
         </div>
       </div>
 
@@ -368,18 +385,24 @@
         <div class="status-list">
           <div class="status-item">
             <div>
-              <div class="s-lbl">Auto-Detected EXP Bar (Blue Box)</div>
+              <div class="s-lbl">EXP OCR INPUT (Exact crop fed to OCR)</div>
               <div id="readExp" class="s-val">Waiting for window...</div>
             </div>
-            <canvas id="cropExp"></canvas>
+            <div class="ocr-pair">
+              <canvas id="cropExp"></canvas>
+              <canvas id="binExp"></canvas>
+            </div>
           </div>
 
           <div class="status-item">
             <div>
-              <div class="s-lbl">Auto-Detected Inventory Mesos (Press <code>I</code>)</div>
+              <div class="s-lbl">MESO AMOUNT INPUT (Press <code>I</code> or Select region)</div>
               <div id="readMeso" class="s-val">Open Inventory to sync</div>
             </div>
-            <canvas id="cropMeso"></canvas>
+            <div class="ocr-pair">
+              <canvas id="cropMeso"></canvas>
+              <canvas id="binMeso"></canvas>
+            </div>
           </div>
 
           <div class="status-item">
@@ -407,11 +430,11 @@
         <button class="sm" data-nudge="qs:dy:-1">↑ Y</button>
         <button class="sm" data-nudge="qs:dy:1">Y ↓</button>
 
-        <button class="sm" id="btnResetHudOffset" style="margin-left:auto;">Reset Calibration</button>
+        <button class="sm" id="btnResetHudOffset" style="margin-left:auto;">Reset auto regions</button>
       </div>
     </div>
 
-    <!-- Quickslot Potions Card (Matching Maple Track 12-Slot Panel) -->
+    <!-- Quickslot Potions Card -->
     <div class="card">
       <div class="card-head">
         <div>
@@ -433,7 +456,7 @@
         <button id="btnToggleSlots" class="sm" style="margin-left:auto;">Panel: 12 Slots (4×3)</button>
       </div>
       <div style="font-size:0.74rem; color:var(--muted); margin-bottom:8px;">
-        Reading selected slots every 2 seconds.
+        Reading selected slots every 2 seconds. Unreadable frames keep the last count.
       </div>
 
       <div id="quickslotGrid" class="qs-grid"></div>
@@ -524,17 +547,19 @@
     manualMesoOffset: 0,
 
     trackPots: true,
-    slotCount: safeLoad('ms_slotCount_v3', 12), // Defaults to 12-slot 4x3 panel (like image_97bb81.png)
+    slotCount: safeLoad('ms_slotCount_v3', 12),
     slotConfig: safeLoad('ms_slotConfig_v2', {}),
     slotLive: {},
 
-    offsets: safeLoad('ms_offsets_v5', {
+    offsets: safeLoad('ms_offsets_v6', {
       exp: { dx: 0, dy: 0 },
       qs:  { dx: 0, dy: 0 }
     }),
-    customNorm: safeLoad('ms_customNorm_v1', {
-      exp: null,
-      qs:  null
+    // Normalized drag-calibrated boxes (saved relative to frame size, just like Maple Track)
+    customNorm: safeLoad('ms_customNorm_v2', {
+      exp:  null, // { x, y, w, h } in 0..1
+      meso: null,
+      qs:   null
     }),
     drawTarget: null,
     dragStart: null,
@@ -579,35 +604,32 @@
   }
   initOcr();
 
-  // --- Quickslot White-Core-With-Black-Outline Extractor ---
-  // Isolates ONLY the white interior pixels of the outlined stack numbers (71, 769, 159, 44)
-  // while completely erasing both the white slot background and dark potion art!
-  async function readQuickslotDigits(srcCanvas, sx, sy, sw, sh) {
+  // --- 1. Quickslot White-Core-With-Black-Outline Extractor ---
+  async function readQuickslotDigits(srcCanvas, sx, sy, sw, sh, debugCanvasId = null) {
     if (!ocrWorker || sw <= 2 || sh <= 2) return '';
 
-    const rawCtx = workCanvas.getContext('2d');
-    const img = rawCtx.getImageData(sx, sy, sw, sh);
+    const img = wCtx.getImageData(sx, sy, sw, sh);
     const d = img.data;
     const mask = new Uint8Array(sw * sh);
 
-    const isBlackOutline = (x, y) => {
+    const isDarkBorder = (x, y) => {
       if (x < 0 || y < 0 || x >= sw || y >= sh) return false;
       const i = (y * sw + x) * 4;
-      return d[i] < 65 && d[i + 1] < 65 && d[i + 2] < 65;
+      return d[i] < 75 && d[i + 1] < 75 && d[i + 2] < 75;
     };
 
-    // Keep white digit core pixels that touch a black outline pixel within 1-2px
+    // Keep white digit core pixels touching the 1px black font outline within 1-2px
     for (let y = 0; y < sh; y++) {
       for (let x = 0; x < sw; x++) {
         const i = (y * sw + x) * 4;
         const r = d[i], g = d[i + 1], b = d[i + 2];
-        const isWhiteFill = (r > 205 && g > 205 && b > 205);
+        const isWhiteFill = (r > 195 && g > 195 && b > 195 && Math.abs(r - b) < 30);
         if (!isWhiteFill) continue;
 
         let touchesOutline = false;
         for (let dy = -2; dy <= 2 && !touchesOutline; dy++) {
           for (let dx = -2; dx <= 2; dx++) {
-            if (isBlackOutline(x + dx, y + dy)) {
+            if (isDarkBorder(x + dx, y + dy)) {
               touchesOutline = true;
               break;
             }
@@ -619,7 +641,6 @@
       }
     }
 
-    // Write 1x mask to a tiny temp canvas, then 4x nearest-neighbor upscale with white padding
     const tmp = document.createElement('canvas');
     tmp.width = sw;
     tmp.height = sh;
@@ -634,6 +655,13 @@
     }
     tCtx.putImageData(tImg, 0, 0);
 
+    if (debugCanvasId && $(debugCanvasId)) {
+      const dbg = $(debugCanvasId);
+      dbg.width = sw;
+      dbg.height = sh;
+      dbg.getContext('2d').drawImage(tmp, 0, 0);
+    }
+
     const scale = 4;
     const pad = 12;
     scaleCanvas.width = sw * scale + pad * 2;
@@ -647,8 +675,8 @@
     return (text || '').replace(/[^\d]/g, '');
   }
 
-  // --- 3x Upscaled + Binarized OCR Reader (EXP & Inventory Mesos) ---
-  async function readUpscaledDigits(srcCanvas, sx, sy, sw, sh, mode = 'white-on-dark') {
+  // --- 2. 3x Upscaled + Binarized OCR Reader (EXP & Inventory Mesos) ---
+  async function readUpscaledDigits(srcCanvas, sx, sy, sw, sh, mode = 'white-on-dark', debugCanvasId = null) {
     if (!ocrWorker || sw <= 2 || sh <= 2) return '';
 
     const scale = 3;
@@ -673,10 +701,11 @@
       if (mode === 'white-on-dark') {
         const minC = Math.min(r, g, b);
         const maxC = Math.max(r, g, b);
-        isInk = (minC > 180 && (maxC - minC) < 42);
+        isInk = (minC > 175 && (maxC - minC) < 48);
       } else {
+        // Dark digits on white/light-grey Inventory Meso field
         const lum = r * 0.299 + g * 0.587 + b * 0.114;
-        isInk = lum < 155;
+        isInk = lum < 165;
       }
 
       const v = isInk ? 0 : 255;
@@ -687,6 +716,14 @@
     }
 
     sCtx.putImageData(img, pad, pad);
+
+    if (debugCanvasId && $(debugCanvasId)) {
+      const dbg = $(debugCanvasId);
+      dbg.width = uw;
+      dbg.height = uh;
+      dbg.getContext('2d').drawImage(scaleCanvas, pad, pad, uw, uh, 0, 0, uw, uh);
+    }
+
     const { data: { text } } = await ocrWorker.recognize(scaleCanvas);
     return (text || '').trim();
   }
@@ -701,20 +738,18 @@
     });
   });
 
-  // --- Drag-to-Calibrate on Preview Canvas ---
-  $('btnDrawExp').addEventListener('click', () => {
-    state.drawTarget = state.drawTarget === 'exp' ? null : 'exp';
-    $('btnDrawExp').classList.toggle('active-tool', state.drawTarget === 'exp');
-    $('btnDrawQs').classList.remove('active-tool');
+  // --- Drag-to-Calibrate Buttons (Select EXP readout / Select meso amount / Select quickslots) ---
+  function armDrawTool(target, btnId) {
+    state.drawTarget = state.drawTarget === target ? null : target;
+    ['btnDrawExp', 'btnDrawMeso', 'btnDrawQs'].forEach(id => {
+      $(id).classList.toggle('active-tool', id === btnId && state.drawTarget === target);
+    });
     overlayCanvas.style.cursor = state.drawTarget ? 'crosshair' : 'default';
-  });
+  }
 
-  $('btnDrawQs').addEventListener('click', () => {
-    state.drawTarget = state.drawTarget === 'qs' ? null : 'qs';
-    $('btnDrawQs').classList.toggle('active-tool', state.drawTarget === 'qs');
-    $('btnDrawExp').classList.remove('active-tool');
-    overlayCanvas.style.cursor = state.drawTarget ? 'crosshair' : 'default';
-  });
+  $('btnDrawExp').addEventListener('click', () => armDrawTool('exp', 'btnDrawExp'));
+  $('btnDrawMeso').addEventListener('click', () => armDrawTool('meso', 'btnDrawMeso'));
+  $('btnDrawQs').addEventListener('click', () => armDrawTool('qs', 'btnDrawQs'));
 
   function getNormPos(e) {
     const rect = overlayCanvas.getBoundingClientRect();
@@ -742,15 +777,14 @@
     const w = Math.abs(state.dragCurrent.x - state.dragStart.x);
     const h = Math.abs(state.dragCurrent.y - state.dragStart.y);
 
-    if (w > 0.01 && h > 0.008) {
+    if (w > 0.008 && h > 0.006) {
       state.customNorm[state.drawTarget] = { x, y, w, h };
-      localStorage.setItem('ms_customNorm_v1', JSON.stringify(state.customNorm));
+      localStorage.setItem('ms_customNorm_v2', JSON.stringify(state.customNorm));
     }
     state.dragStart = null;
     state.dragCurrent = null;
     state.drawTarget = null;
-    $('btnDrawExp').classList.remove('active-tool');
-    $('btnDrawQs').classList.remove('active-tool');
+    ['btnDrawExp', 'btnDrawMeso', 'btnDrawQs'].forEach(id => $(id).classList.remove('active-tool'));
     overlayCanvas.style.cursor = 'default';
     scanFrame();
   });
@@ -760,16 +794,16 @@
     btn.addEventListener('click', () => {
       const [target, axis, valStr] = btn.dataset.nudge.split(':');
       state.offsets[target][axis] += parseInt(valStr, 10);
-      localStorage.setItem('ms_offsets_v5', JSON.stringify(state.offsets));
+      localStorage.setItem('ms_offsets_v6', JSON.stringify(state.offsets));
       scanFrame();
     });
   });
 
   $('btnResetHudOffset').addEventListener('click', () => {
     state.offsets = { exp: { dx: 0, dy: 0 }, qs: { dx: 0, dy: 0 } };
-    state.customNorm = { exp: null, qs: null };
-    localStorage.setItem('ms_offsets_v5', JSON.stringify(state.offsets));
-    localStorage.setItem('ms_customNorm_v1', JSON.stringify(state.customNorm));
+    state.customNorm = { exp: null, meso: null, qs: null };
+    localStorage.setItem('ms_offsets_v6', JSON.stringify(state.offsets));
+    localStorage.setItem('ms_customNorm_v2', JSON.stringify(state.customNorm));
     scanFrame();
   });
 
@@ -801,7 +835,7 @@
     renderQuickslotCards();
   });
 
-  // --- Build Quickslot UI Cards (Exact Maple Track 4x3 Card Design from image_97bb81.png) ---
+  // --- Build Quickslot UI Cards ---
   function renderQuickslotCards() {
     const grid = $('quickslotGrid');
     grid.className = 'qs-grid';
@@ -823,7 +857,10 @@
       card.innerHTML = `
         <div class="qs-top">
           <div class="qs-title">Slot ${i + 1}</div>
-          <canvas id="qsCvs_${i}" width="32" height="32"></canvas>
+          <div class="qs-thumbs">
+            <canvas id="qsBin_${i}" class="ocr-bin" width="28" height="13" title="Exact digits seen by OCR" style="${isTracked ? '' : 'display:none;'}"></canvas>
+            <canvas id="qsCvs_${i}" width="32" height="32"></canvas>
+          </div>
         </div>
 
         <select id="qsSel_${i}">${optionsHtml}</select>
@@ -873,7 +910,83 @@
   }
   renderQuickslotCards();
 
-  // --- Bottom-Anchored HUD & Quickslot Detector ---
+  // --- Automatic 32x32 Quickslot Panel Finder (Finds the actual white-framed 32x32 slot tiles!) ---
+  function findQuickslotPanel(w, h, data, gameLeft, clientW, gameBottom) {
+    const cols = 4;
+    const rows = state.slotCount === 12 ? 3 : 2;
+    const slotW = 35;
+    const slotH = 34;
+
+    if (state.customNorm.qs) {
+      const q = state.customNorm.qs;
+      return {
+        x: Math.round(q.x * w) + state.offsets.qs.dx,
+        y: Math.round(q.y * h) + state.offsets.qs.dy,
+        w: Math.round(q.w * w),
+        h: Math.round(q.h * h),
+        cols,
+        rows,
+        slotW: (q.w * w) / cols,
+        slotH: (q.h * h) / rows
+      };
+    }
+
+    // Search bottom-right region for the top-left white corner of Slot 1 (which sits right next to the 1 keycap)
+    const searchX0 = gameLeft + Math.floor(clientW * 0.55);
+    const searchX1 = gameLeft + clientW - (cols * slotW) - 4;
+    const searchY0 = gameBottom - 135;
+    const searchY1 = gameBottom - (rows * slotH) + 6;
+
+    let bestScore = -1;
+    let bestX = gameLeft + clientW - 421;
+    let bestY = (gameBottom - 1) - (rows * slotH) + 3;
+
+    for (let y = searchY0; y <= searchY1; y++) {
+      for (let x = searchX0; x <= searchX1; x++) {
+        // Check if (x, y) is the top-left corner of a 4xN grid of 32x32 white-backed slots spaced 35x34px apart
+        let whiteHits = 0;
+        let darkFrameHits = 0;
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const sx = x + c * slotW;
+            const sy = y + r * slotH;
+
+            // Dark border 1px left of slot (sx - 1, sy + 16)
+            const bi = ((sy + 16) * w + (sx - 1)) * 4;
+            if (data[bi] < 110 && data[bi + 1] < 110 && data[bi + 2] < 110) darkFrameHits++;
+
+            // Bright white interior near top-right of slot (sx + 25, sy + 5) and bottom-right (sx + 28, sy + 28)
+            const wi1 = ((sy + 5) * w + (sx + 25)) * 4;
+            if (data[wi1] > 215 && data[wi1 + 1] > 215 && data[wi1 + 2] > 215) whiteHits++;
+
+            const wi2 = ((sy + 28) * w + (sx + 28)) * 4;
+            if (data[wi2] > 215 && data[wi2 + 1] > 215 && data[wi2 + 2] > 215) whiteHits++;
+          }
+        }
+
+        const score = whiteHits * 2 + darkFrameHits * 3;
+        if (score > bestScore && whiteHits >= cols * rows) {
+          bestScore = score;
+          bestX = x;
+          bestY = y;
+        }
+      }
+    }
+
+    return {
+      x: Math.max(0, bestX + state.offsets.qs.dx),
+      y: Math.max(0, bestY + state.offsets.qs.dy),
+      w: cols * slotW,
+      h: rows * slotH,
+      cols,
+      rows,
+      slotW,
+      slotH
+    };
+  }
+
+  // --- Bottom-Anchored HUD Detector ---
   function detectBottomHud(w, h, data) {
     let gameBottom = h - 1;
     for (let y = h - 1; y > h - 15; y--) {
@@ -933,51 +1046,32 @@
       expRect = {
         x: Math.max(0, (yellowPixels > 6 ? expBarMinX + 18 : defaultExpX) + state.offsets.exp.dx),
         y: Math.max(0, (yellowPixels > 6 ? expBarMinY - 2 : defaultExpY) + state.offsets.exp.dy),
-        w: isWide ? 158 : 168,
+        w: isWide ? 162 : 172,
         h: 15
       };
     }
 
-    const cols = 4;
-    const rows = state.slotCount === 12 ? 3 : 2;
-    const slotW = 35;
-    const slotH = 34;
-
-    let qsRect;
-    if (state.customNorm.qs) {
-      const q = state.customNorm.qs;
-      qsRect = {
-        x: Math.round(q.x * w) + state.offsets.qs.dx,
-        y: Math.round(q.y * h) + state.offsets.qs.dy,
-        w: Math.round(q.w * w),
-        h: Math.round(q.h * h),
-        cols,
-        rows,
-        slotW: (q.w * w) / cols,
-        slotH: (q.h * h) / rows
-      };
-    } else {
-      // Exact anchor for 12-slot (4x3) and 8-slot (4x2) quickslot panel at bottom-right
-      const defaultQsX = isWide ? (gameLeft + clientW - 421) : (gameLeft + clientW - 146);
-      const defaultQsY = (gameBottom - 1) - (rows * slotH) + 3;
-
-      qsRect = {
-        x: Math.max(0, defaultQsX + state.offsets.qs.dx),
-        y: Math.max(0, defaultQsY + state.offsets.qs.dy),
-        w: cols * slotW,
-        h: rows * slotH,
-        cols,
-        rows,
-        slotW,
-        slotH
-      };
-    }
-
+    const qsRect = findQuickslotPanel(w, h, data, gameLeft, clientW, gameBottom);
     return { clientW, gameBottom, expRect, qsRect };
   }
 
   // --- Classic Light-Grey "ITEM INVENTORY" & Meso Box Detector ---
   function detectInventoryWindow(w, h, data) {
+    if (state.customNorm.meso) {
+      const m = state.customNorm.meso;
+      const mx = Math.round(m.x * w);
+      const my = Math.round(m.y * h);
+      const mw = Math.round(m.w * w);
+      const mh = Math.round(m.h * h);
+      return {
+        winX: Math.max(0, mx - 48),
+        winY: Math.max(0, my - 245),
+        winW: 172,
+        winH: 290,
+        mesoRect: { x: mx, y: my, w: mw, h: mh }
+      };
+    }
+
     for (let y = 140; y < h - 45; y += 2) {
       for (let x = 35; x < w - 125; x += 2) {
         const i = (y * w + x) * 4;
@@ -1090,7 +1184,7 @@
       oCtx.setLineDash([]);
     }
 
-    // Update Crop Thumbnails
+    // Update Raw Crop Thumbnails
     const expCrop = $('cropExp');
     expCrop.width = hud.expRect.w;
     expCrop.height = hud.expRect.h;
@@ -1119,7 +1213,8 @@
       const rawExpStr = await readUpscaledDigits(
         workCanvas,
         hud.expRect.x, hud.expRect.y, hud.expRect.w, hud.expRect.h,
-        'white-on-dark'
+        'white-on-dark',
+        'binExp'
       );
       const cleanExpStr = rawExpStr.replace(/\s+/g, '');
       const expMatch = cleanExpStr.match(/([\d,\.]+)[\[\(\|1I]?(\d{1,2}\.\d{1,2})%?/);
@@ -1154,7 +1249,8 @@
         const rawMesoStr = await readUpscaledDigits(
           workCanvas,
           inv.mesoRect.x, inv.mesoRect.y, inv.mesoRect.w, inv.mesoRect.h,
-          'dark-on-white'
+          'dark-on-white',
+          'binMeso'
         );
         const digits = rawMesoStr.replace(/[^\d]/g, '');
 
@@ -1176,7 +1272,7 @@
         }
       }
 
-      // C. Read ONLY Selected/Tracked Quickslots (skipping "Not tracked" slots, just like Maple Track)
+      // C. Read ONLY Selected/Tracked Quickslots (Unreadable frames keep the last count)
       if (state.trackPots) {
         for (let i = 0; i < state.slotCount; i++) {
           const cfgKey = `${state.slotCount}_${i}`;
@@ -1188,31 +1284,37 @@
           const sx = Math.round(hud.qsRect.x + col * hud.qsRect.slotW);
           const sy = Math.round(hud.qsRect.y + row * hud.qsRect.slotH);
 
-          // Read bottom-left stack count area (x: 0..27, y: 18..31)
-          const rawCount = await readQuickslotDigits(workCanvas, sx, sy + 18, 28, 13);
+          const rawCount = await readQuickslotDigits(
+            workCanvas,
+            sx, sy + 18, 28, 13,
+            `qsBin_${i}`
+          );
 
           if (!state.slotLive[i]) {
             state.slotLive[i] = { count: null, lastCount: null, used: 0, restocked: 0 };
           }
 
+          // Missing/unreadable digits are ignored so last valid count is preserved
           if (rawCount.length > 0) {
             const count = parseInt(rawCount, 10);
-            state.slotLive[i].count = count;
+            if (!isNaN(count) && count >= 1 && count <= 9999) {
+              state.slotLive[i].count = count;
 
-            const prev = state.slotLive[i].lastCount;
-            if (prev !== null) {
-              if (count < prev && (prev - count) <= 30 && state.mode === 'grinding') {
-                state.slotLive[i].used += (prev - count);
-              } else if (count > prev && (count - prev) <= 2000) {
-                state.slotLive[i].restocked = (state.slotLive[i].restocked || 0) + (count - prev);
+              const prev = state.slotLive[i].lastCount;
+              if (prev !== null) {
+                if (count < prev && (prev - count) <= 30 && state.mode === 'grinding') {
+                  state.slotLive[i].used += (prev - count);
+                } else if (count > prev && (count - prev) <= 2000) {
+                  state.slotLive[i].restocked = (state.slotLive[i].restocked || 0) + (count - prev);
+                }
               }
-            }
-            state.slotLive[i].lastCount = count;
+              state.slotLive[i].lastCount = count;
 
-            const remEl = $(`qsRem_${i}`);
-            const usedEl = $(`qsUsed_${i}`);
-            if (remEl) remEl.textContent = `Remaining ${count}`;
-            if (usedEl) usedEl.textContent = `Used ${state.slotLive[i].used} · Restocked ${state.slotLive[i].restocked || 0}`;
+              const remEl = $(`qsRem_${i}`);
+              const usedEl = $(`qsUsed_${i}`);
+              if (remEl) remEl.textContent = `Remaining ${count}`;
+              if (usedEl) usedEl.textContent = `Used ${state.slotLive[i].used} · Restocked ${state.slotLive[i].restocked || 0}`;
+            }
           }
         }
       }
@@ -1533,11 +1635,11 @@
         }
         if (data.offsets) {
           state.offsets = data.offsets;
-          localStorage.setItem('ms_offsets_v5', JSON.stringify(state.offsets));
+          localStorage.setItem('ms_offsets_v6', JSON.stringify(state.offsets));
         }
         if (data.customNorm) {
           state.customNorm = data.customNorm;
-          localStorage.setItem('ms_customNorm_v1', JSON.stringify(state.customNorm));
+          localStorage.setItem('ms_customNorm_v2', JSON.stringify(state.customNorm));
         }
         if (Array.isArray(data.logs)) {
           state.logs = data.logs;
